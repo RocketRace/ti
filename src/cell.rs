@@ -1,5 +1,7 @@
 //! Module responsible for formatting black & white bitmaps into Unicode braille characters
 
+use crate::color::Color;
+
 pub const BRAILLE_BASE_CODEPOINT: u32 = 0x2800;
 pub const BRAILLE_UTF8_BYTES: usize = 3;
 // Pixel format
@@ -15,18 +17,30 @@ pub const BRAILLE_UTF8_BYTES: usize = 3;
 // 6 7
 
 #[derive(Clone, Copy, Default)]
-pub struct Cell(pub u8);
+pub struct Cell {
+    pub bits: u8,
+    pub fg: Color,
+    pub bg: Color,
+}
 
 impl Cell {
     pub const PIXEL_WIDTH: usize = 2;
     pub const PIXEL_HEIGHT: usize = 4;
 
+    pub fn new(bits: u8) -> Self {
+        Self {
+            bits,
+            fg: Color::None,
+            bg: Color::None,
+        }
+    }
+
     pub const fn braille_offset(self) -> u8 {
-        (self.0 & 0b11100001)
-            | ((self.0 & 0b10) << 2)
-            | ((self.0 & 0b100) >> 1)
-            | ((self.0 & 0b1000) << 1)
-            | ((self.0 & 0b10000) >> 2)
+        (self.bits & 0b11100001)
+            | ((self.bits & 0b10) << 2)
+            | ((self.bits & 0b100) >> 1)
+            | ((self.bits & 0b1000) << 1)
+            | ((self.bits & 0b10000) >> 2)
         // inverse operation:
         //   (offset & 0b11100001)
         // | ((offset & 0b10) << 1)
@@ -53,7 +67,7 @@ mod tests {
 
     #[test]
     fn unique_offset() {
-        let map: HashSet<_> = (0u8..=255).map(|n| Cell(n).braille_offset()).collect();
+        let map: HashSet<_> = (0u8..=255).map(|n| Cell::new(n).braille_offset()).collect();
         assert_eq!(map.len(), 256)
     }
 }

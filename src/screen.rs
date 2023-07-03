@@ -49,8 +49,8 @@ impl Screen {
     fn transform_pixel(&mut self, x: usize, y: usize, blit: Blit) {
         if x < self.width && y < self.height {
             let (index, pixel) = self.pixel_index(x, y);
-            let orig = self.cells[index].0;
-            self.cells[index].0 = match blit {
+            let orig = self.cells[index].bits;
+            self.cells[index].bits = match blit {
                 Blit::Set => orig | pixel,
                 Blit::Unset => orig & !pixel,
                 Blit::Toggle => orig ^ pixel,
@@ -60,7 +60,7 @@ impl Screen {
 
     pub fn pixel_at(&self, x: usize, y: usize) -> bool {
         let (index, pixel) = self.pixel_index(x, y);
-        self.cells[index].0 & pixel != 0
+        self.cells[index].bits & pixel != 0
     }
 
     /// Ignores out-of-bounds inputs
