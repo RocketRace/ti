@@ -15,6 +15,7 @@ use crate::{
 /// bytes that can be written to a terminal.
 pub struct Screen {
     cells: Vec<Cell>,
+    #[allow(unused)]
     updates: Vec<Cell>,
     width: usize,
     height: usize,
