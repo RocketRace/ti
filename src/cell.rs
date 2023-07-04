@@ -42,24 +42,35 @@ impl Cell {
     /// A cell is exactly 4 pixels tall, since it consists of one braille character.
     pub const PIXEL_HEIGHT: usize = 4;
 
-    /// Create a new cell with the specified bits.
+    /// Create a new cell with the specified internal bits.
     pub fn new(bits: u8) -> Self {
         Self { bits }
     }
 
     /// Computes the Unicode codepoint offset format of the braille character.
-    pub const fn braille_offset(self) -> u8 {
+    pub fn braille_offset(self) -> u8 {
         (self.bits & 0b11100001)
             | ((self.bits & 0b10) << 2)
             | ((self.bits & 0b100) >> 1)
             | ((self.bits & 0b1000) << 1)
             | ((self.bits & 0b10000) >> 2)
-        // inverse operation:
-        //   (offset & 0b11100001)
-        // | ((offset & 0b10) << 1)
-        // | ((offset & 0b100) << 2)
-        // | ((offset & 0b1000) >> 2)
-        // | ((offset & 0b10000) >> 1)
+    }
+
+    /// Creates a cell from its corresponding braille character.
+    /// If the given character is not a braille character, returns `None`.
+    pub fn from_braille(c: char) -> Option<Self> {
+        let codepoint = c as u32;
+        if (BRAILLE_BASE_CODEPOINT..BRAILLE_BASE_CODEPOINT + 256).contains(&codepoint) {
+            let offset = (codepoint - BRAILLE_BASE_CODEPOINT) as u8;
+            let bits = (offset & 0b11100001)
+                | ((offset & 0b10) << 1)
+                | ((offset & 0b100) << 2)
+                | ((offset & 0b1000) >> 2)
+                | ((offset & 0b10000) >> 1);
+            Some(Self::new(bits))
+        } else {
+            None
+        }
     }
 
     /// Encodes the cell as a sequence of UTF-8 bytes representing
@@ -85,6 +96,22 @@ mod tests {
     fn unique_offset() {
         let map: HashSet<_> = (0u8..=255).map(|n| Cell::new(n).braille_offset()).collect();
         assert_eq!(map.len(), 256)
+    }
+
+    #[test]
+    fn braille_round_trip() {
+        for i in 0..=255 {
+            let c = char::from_u32(BRAILLE_BASE_CODEPOINT + i).unwrap();
+            assert_eq!(i as u8, Cell::from_braille(c).unwrap().braille_offset());
+            assert_eq!(
+                c,
+                std::str::from_utf8(&Cell::from_braille(c).unwrap().to_braille_utf8())
+                    .unwrap()
+                    .chars()
+                    .next()
+                    .unwrap()
+            );
+        }
     }
 
     #[test]

@@ -183,7 +183,7 @@ impl Screen {
         let mut buf = vec![0; self.cells.len() * BRAILLE_UTF8_BYTES + self.cell_height()];
         for y in 0..self.cell_height() {
             for x in 0..self.cell_width() {
-                let i = y * self.cell_width() + x;
+                let i = self.cell_index(x, y);
                 // extra newlines also counted here
                 buf[i * 3 + y..(i + 1) * 3 + y].copy_from_slice(&self.cells[i].to_braille_utf8())
             }
