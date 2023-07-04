@@ -1,6 +1,6 @@
 //! Module responsible for formatting black & white bitmaps into Unicode braille characters.
 //!
-//! See the [Cell] documentation for more.
+//! See the [`Cell`] documentation for more.
 
 /// The unicode scalar value for the first ("empty") braille codepoint.
 pub const BRAILLE_BASE_CODEPOINT: u32 = 0x2800;
@@ -28,7 +28,7 @@ pub const BRAILLE_UTF8_BYTES: usize = 3;
 /// 6 7
 /// ```
 /// That is, the braille character with the top left and top right dots set is encoded as an 8-bit offset
-/// from [BRAILLE_BASE_CODEPOINT] with the 0th and 3rd bits set, i.e. `0b1001`.
+/// from [`BRAILLE_BASE_CODEPOINT`] with the 0th and 3rd bits set, i.e. `0b1001`.
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
 #[repr(transparent)]
 pub struct Cell {

@@ -1,4 +1,4 @@
-//! Module implementing sprite data.
+//! Module implementing atomic sprites.
 
 use crate::{cell::Cell, color::Color};
 
@@ -7,7 +7,7 @@ use crate::{cell::Cell, color::Color};
 ///
 /// A sprite contains information about its pixels, their color,
 ///
-/// Multiple sprites can be composed together into a [crate::graphic::Graphic],
+/// Multiple sprites can be composed together into a [`crate::graphic::Graphic`],
 /// which is a convenient  wrapper around pixel information comprised of more than one sprite.
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
 pub struct Sprite {

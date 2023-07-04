@@ -1,5 +1,5 @@
 //! Module for writing output to the screen.
-//! Contains the [Screen] type and its public interface.
+//! Contains the [`Screen`] type and its public interface.
 
 use crate::{
     cell::{Cell, BRAILLE_UTF8_BYTES},
@@ -100,9 +100,9 @@ impl Screen {
     /// Transforms the pixel value at the given coordinates with a generic given blitting strategy.
     ///
     /// This accepts a `blit` parameter that determines how the pixel will be drawn:
-    /// * [Blit::Set] and [Blit::Add] are synonymous and cause the pixel to be set.
-    /// * [Blit::Unset] and [Blit::Subtract] are synonymous and cause the pixel to be unset.
-    /// * [Blit::Toggle] causes the pixel to be flipped, i.e. turned from a 1 to a 0 and vice versa.
+    /// * [`Blit::Set`] and [`Blit::Add`] are synonymous and cause the pixel to be set.
+    /// * [`Blit::Unset`] and [`Blit::Subtract`] are synonymous and cause the pixel to be unset.
+    /// * [`Blit::Toggle`] causes the pixel to be flipped, i.e. turned from a 1 to a 0 and vice versa.
     ///
     /// Returns `true` if the coordinates were valid, and `false` if the given coordinate was out of bounds.
     pub fn draw_pixel_at(&mut self, x: usize, y: usize, blit: Blit) -> bool {
@@ -120,20 +120,20 @@ impl Screen {
         }
     }
 
-    /// Draws a [Sprite] to the screen at a given cell position. The sprite will
+    /// Draws a [`Sprite`] to the screen at a given cell position. The sprite will
     /// be aligned to the cell grid when drawn.
     ///
     /// This accepts an additional `blit` parameter specifying how
     /// the sprite should be drawn:
-    /// * [Blit::Set] => Draw the entire sprite normally to the screen, including
+    /// * [`Blit::Set`] => Draw the entire sprite normally to the screen, including
     ///   unset pixels.
-    /// * [Blit::Unset] => Draw the entire sprite inverted to the screen, including
+    /// * [`Blit::Unset`] => Draw the entire sprite inverted to the screen, including
     ///   pixels that were originally unset in the sprite.
-    /// * [Blit::Add] => Draw the sprite additively to the screen. Pixels that
+    /// * [`Blit::Add`] => Draw the sprite additively to the screen. Pixels that
     ///   are set in the sprite will be set, rest are unchanged.
-    /// * [Blit::Subtract] => Draw the sprite subtractively to the screen. Pixels that
+    /// * [`Blit::Subtract`] => Draw the sprite subtractively to the screen. Pixels that
     ///   are set in the sprite will be unset, rest are unchanged.
-    /// * [Blit::Toggle] => Flip the pixels on the screen where the sprite is set.
+    /// * [`Blit::Toggle`] => Flip the pixels on the screen where the sprite is set.
     ///
     /// Returns `true` if the coordinates were valid, and `false` if the given coordinate was out of bounds.
     pub fn draw_sprite_aligned(
