@@ -29,7 +29,7 @@ pub const BRAILLE_UTF8_BYTES: usize = 3;
 /// ```
 /// That is, the braille character with the top left and top right dots set is encoded as an 8-bit offset
 /// from [BRAILLE_BASE_CODEPOINT] with the 0th and 3rd bits set, i.e. `0b1001`.
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
 #[repr(transparent)]
 pub struct Cell {
     /// The internal storage bits.
