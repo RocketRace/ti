@@ -12,6 +12,7 @@ use crate::cell::{Cell, BRAILLE_UTF8_BYTES};
 /// bytes that can be written to a terminal.
 pub struct Screen {
     cells: Vec<Cell>,
+    updates: Vec<Cell>,
     width: usize,
     height: usize,
 }
@@ -42,6 +43,10 @@ impl Screen {
     pub fn new(width: usize, height: usize) -> Self {
         Self {
             cells: vec![
+                Cell::default();
+                div_ceil(width, Cell::PIXEL_WIDTH) * div_ceil(height, Cell::PIXEL_HEIGHT)
+            ],
+            updates: vec![
                 Cell::default();
                 div_ceil(width, Cell::PIXEL_WIDTH) * div_ceil(height, Cell::PIXEL_HEIGHT)
             ],

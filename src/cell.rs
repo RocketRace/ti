@@ -2,8 +2,6 @@
 //!
 //! See the [Cell] documentation for more.
 
-use crate::color::Color;
-
 /// The unicode scalar value for the first ("empty") braille codepoint.
 pub const BRAILLE_BASE_CODEPOINT: u32 = 0x2800;
 /// The number of bytes required to encode a braille unicode character into utf-8. This is a constant value,
@@ -32,11 +30,10 @@ pub const BRAILLE_UTF8_BYTES: usize = 3;
 /// That is, the braille character with the top left and top right dots set is encoded as an 8-bit offset
 /// from [BRAILLE_BASE_CODEPOINT] with the 0th and 3rd bits set, i.e. `0b1001`.
 #[derive(Clone, Copy, Default)]
+#[repr(transparent)]
 pub struct Cell {
     /// The internal storage bits.
     pub bits: u8,
-    pub fg: Color,
-    pub bg: Color,
 }
 
 impl Cell {
@@ -47,11 +44,7 @@ impl Cell {
 
     /// Create a new cell with the specified bits.
     pub fn new(bits: u8) -> Self {
-        Self {
-            bits,
-            fg: Color::None,
-            bg: Color::None,
-        }
+        Self { bits }
     }
 
     /// Computes the Unicode codepoint offset format of the braille character.

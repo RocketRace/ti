@@ -1,5 +1,2 @@
-#[derive(Clone, Copy, Default)]
-pub enum Color {
-    #[default]
-    None,
-}
+#[derive(Clone, Copy)]
+pub enum Color {}
