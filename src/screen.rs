@@ -3,7 +3,7 @@
 
 use crate::{
     cell::{Cell, BRAILLE_UTF8_BYTES},
-    sprite::Sprite,
+    graphic::Graphic,
 };
 
 /// Type used to write to the screen. Contains public methods
@@ -106,7 +106,7 @@ impl Screen {
     /// * [`Blit::Toggle`] causes the pixel to be flipped, i.e. turned from a 1 to a 0 and vice versa.
     ///
     /// Returns `true` if the coordinates were valid, and `false` if the given coordinate was out of bounds.
-    pub fn draw_pixel_at(&mut self, x: usize, y: usize, blit: Blit) -> bool {
+    pub fn draw_pixel(&mut self, x: usize, y: usize, blit: Blit) -> bool {
         if x < self.width && y < self.height {
             let (index, pixel) = self.pixel_index(x, y);
             let orig = self.cells[index].bits;
@@ -121,8 +121,8 @@ impl Screen {
         }
     }
 
-    /// Draws a [`Sprite`] to the screen at a given cell position. The sprite will
-    /// be aligned to the cell grid when drawn.
+    /// Draws a [`Cell`] to the screen at a given cell position. The given x and y positions
+    /// are in terms of cells.
     ///
     /// This accepts an additional `blit` parameter specifying how
     /// the sprite should be drawn:
@@ -137,22 +137,16 @@ impl Screen {
     /// * [`Blit::Toggle`] => Flip the pixels on the screen where the sprite is set.
     ///
     /// Returns `true` if the coordinates were valid, and `false` if the given coordinate was out of bounds.
-    pub fn draw_sprite_aligned(
-        &mut self,
-        sprite: Sprite,
-        cell_x: usize,
-        cell_y: usize,
-        blit: Blit,
-    ) -> bool {
+    pub fn draw_cell(&mut self, cell: Cell, cell_x: usize, cell_y: usize, blit: Blit) -> bool {
         if cell_x < self.cell_width() && cell_y < self.cell_height() {
             let index = self.cell_index(cell_x, cell_y);
             let orig = self.cells[index].bits;
             self.cells[index].bits = match blit {
-                Blit::Unset => !sprite.cell.bits,
-                Blit::Subtract => orig & !sprite.cell.bits,
-                Blit::Set => sprite.cell.bits,
-                Blit::Add => orig | sprite.cell.bits,
-                Blit::Toggle => orig ^ sprite.cell.bits,
+                Blit::Unset => !cell.bits,
+                Blit::Subtract => orig & !cell.bits,
+                Blit::Set => cell.bits,
+                Blit::Add => orig | cell.bits,
+                Blit::Toggle => orig ^ cell.bits,
             };
             true
         } else {
@@ -160,21 +154,23 @@ impl Screen {
         }
     }
 
+    pub fn draw_graphic(&mut self, graphic: Graphic, pixel_x: usize, pixel_y: usize) {}
+
     /// Sets the pixel value at the given coordinates to be the given value. If `value` is
     /// `true`, sets the pixel value to be 1. Otherwise, sets it to 0.
     ///
     /// **Ignores** out-of-bounds input.
     /// This may be preferred when drawing graphics that can partially clip off screen.
-    pub fn set_pixel_at(&mut self, x: usize, y: usize, value: bool) {
-        self.draw_pixel_at(x, y, if value { Blit::Set } else { Blit::Unset });
+    pub fn set_pixel(&mut self, x: usize, y: usize, value: bool) {
+        self.draw_pixel(x, y, if value { Blit::Set } else { Blit::Unset });
     }
 
     /// Flips the pixel value at the given coordinates to be 1.
     ///
     /// **Ignores** out-of-bounds input.
     /// This may be preferred when drawing graphics that can partially clip off screen.
-    pub fn toggle_pixel_at(&mut self, x: usize, y: usize) {
-        self.draw_pixel_at(x, y, Blit::Toggle);
+    pub fn toggle_pixel(&mut self, x: usize, y: usize) {
+        self.draw_pixel(x, y, Blit::Toggle);
     }
 
     /// Converts the screen to a utf-8 sequence of bytes that can be rendered in a terminal.
@@ -216,10 +212,10 @@ mod tests {
     fn make_square() {
         let mut screen = Screen::new(8, 8);
         for i in 0..8 {
-            screen.set_pixel_at(i, 0, true);
-            screen.set_pixel_at(i, 7, true);
-            screen.set_pixel_at(0, i, true);
-            screen.set_pixel_at(7, i, true);
+            screen.set_pixel(i, 0, true);
+            screen.set_pixel(i, 7, true);
+            screen.set_pixel(0, i, true);
+            screen.set_pixel(7, i, true);
         }
         assert_eq!(
             std::str::from_utf8(&screen.rasterize()).unwrap(),
@@ -231,32 +227,32 @@ mod tests {
     fn blit_types() {
         let mut screen = Screen::new(1, 1);
         assert!(!screen.pixel_at(0, 0));
-        screen.set_pixel_at(0, 0, true);
+        screen.set_pixel(0, 0, true);
         assert!(screen.pixel_at(0, 0));
-        screen.set_pixel_at(0, 0, true);
+        screen.set_pixel(0, 0, true);
         assert!(screen.pixel_at(0, 0));
-        screen.set_pixel_at(0, 0, false);
+        screen.set_pixel(0, 0, false);
         assert!(!screen.pixel_at(0, 0));
-        screen.set_pixel_at(0, 0, false);
+        screen.set_pixel(0, 0, false);
         assert!(!screen.pixel_at(0, 0));
-        screen.toggle_pixel_at(0, 0);
+        screen.toggle_pixel(0, 0);
         assert!(screen.pixel_at(0, 0));
-        screen.toggle_pixel_at(0, 0);
+        screen.toggle_pixel(0, 0);
         assert!(!screen.pixel_at(0, 0));
     }
 
     #[test]
     fn simple_aligned_sprites() {
         let mut screen = Screen::new(4, 4);
-        let sprite = Sprite::new(Cell::new(0b00111100), None, 0);
-        screen.draw_sprite_aligned(sprite, 0, 0, Blit::Set);
-        assert_eq!(screen.cells[0], sprite.cell);
+        let cell = Cell::new(0b00111100);
+        screen.draw_cell(cell, 0, 0, Blit::Set);
+        assert_eq!(screen.cells[0], cell);
         assert_eq!(screen.cells[1], Cell::new(0));
-        screen.draw_sprite_aligned(sprite, 1, 0, Blit::Unset);
-        assert_eq!(screen.cells[0], sprite.cell);
-        assert_eq!(screen.cells[1], Cell::new(!sprite.cell.bits));
-        screen.draw_sprite_aligned(sprite, 0, 0, Blit::Toggle);
+        screen.draw_cell(cell, 1, 0, Blit::Unset);
+        assert_eq!(screen.cells[0], cell);
+        assert_eq!(screen.cells[1], Cell::new(!cell.bits));
+        screen.draw_cell(cell, 0, 0, Blit::Toggle);
         assert_eq!(screen.cells[0], Cell::new(0));
-        assert_eq!(screen.cells[1], Cell::new(!sprite.cell.bits));
+        assert_eq!(screen.cells[1], Cell::new(!cell.bits));
     }
 }

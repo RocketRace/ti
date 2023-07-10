@@ -1,7 +1,7 @@
 use ti::{
     cell::Cell,
+    graphic::Graphic,
     screen::{Blit, Screen},
-    sprite::Sprite,
 };
 
 fn main() {
@@ -33,10 +33,5 @@ fn main() {
 }
 
 fn draw_smiley(screen: &mut Screen, x: usize, y: usize) {
-    let left = Sprite::new(Cell::from_braille('⢌').unwrap(), None, 0);
-    let middle = Sprite::new(Cell::from_braille('⣈').unwrap(), None, 0);
-    let right = Sprite::new(Cell::from_braille('⠄').unwrap(), None, 0);
-    screen.draw_sprite_aligned(left, x, y, Blit::Set);
-    screen.draw_sprite_aligned(middle, x + 1, y, Blit::Set);
-    screen.draw_sprite_aligned(right, x + 2, y, Blit::Set);
+    let smiley = Graphic::from_braille_string(&["⢌⣈⠄"]);
 }
