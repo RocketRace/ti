@@ -2,6 +2,8 @@
 //!
 //! See the [`Cell`] documentation for more.
 
+use std::fmt::Debug;
+
 /// The unicode scalar value for the first ("empty") braille codepoint.
 pub const BRAILLE_BASE_CODEPOINT: u32 = 0x2800;
 /// The number of bytes required to encode a braille unicode character into utf-8. This is a constant value,
@@ -29,11 +31,19 @@ pub const BRAILLE_UTF8_BYTES: usize = 3;
 /// ```
 /// That is, the braille character with the top left and top right dots set is encoded as an 8-bit offset
 /// from [`BRAILLE_BASE_CODEPOINT`] with the 0th and 3rd bits set, i.e. `0b1001`.
-#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct Cell {
     /// The internal storage bits.
     pub bits: u8,
+}
+
+impl Debug for Cell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Cell::from_braille")
+            .field(&std::str::from_utf8(&self.to_braille_utf8()).unwrap())
+            .finish()
+    }
 }
 
 /// Represents the kind of alignment that a cell may be in. Because the pixel grid is higher resolution
@@ -42,22 +52,27 @@ pub struct Cell {
 #[derive(Debug, Clone, Copy)]
 pub enum OffsetCell {
     /// The cell is aligned to the grid.
-    Aligned(Cell),
+    Aligned { cell: Cell },
     /// The cell is horizontally misaligned, i.e. occupies space in two horizontally adjacent cells.
-    Horizontal(Cell, Cell),
+    Horizontal { left: Cell, right: Cell },
     /// The cell is vertically misaligned, i.e. occupies space in two vetically adjacent cells.
-    Vertical(Cell, Cell),
+    Vertical { up: Cell, down: Cell },
     /// The cell is both horizontally and vertically misaligned, i.e. occupies space in four adjacent cells,
     /// around a corner.
-    Corner(Cell, Cell, Cell, Cell),
+    Corner {
+        ul: Cell,
+        ur: Cell,
+        dl: Cell,
+        dr: Cell,
+    },
 }
 
-impl Cell {
-    /// A cell is exactly 2 pixels wide, since it consists of one braille character.
-    pub const PIXEL_WIDTH: usize = 2;
-    /// A cell is exactly 4 pixels tall, since it consists of one braille character.
-    pub const PIXEL_HEIGHT: usize = 4;
+/// A cell is exactly 2 pixels wide, since it consists of one braille character.
+pub const PIXEL_WIDTH: usize = 2;
+/// A cell is exactly 4 pixels tall, since it consists of one braille character.
+pub const PIXEL_HEIGHT: usize = 4;
 
+impl Cell {
     /// Create a new cell with the specified internal bits.
     pub fn new(bits: u8) -> Self {
         Self { bits }
@@ -103,45 +118,45 @@ impl Cell {
 
     fn compute_x_offset(self, x_offset: usize) -> (Cell, Cell) {
         let mask = 0b01010101;
-        let first = (self.bits & mask) << (Cell::PIXEL_WIDTH - x_offset);
+        let first = (self.bits & mask) << (PIXEL_WIDTH - x_offset);
         let second = (self.bits & !mask) >> x_offset;
         (Cell::new(first), Cell::new(second))
     }
 
     fn compute_y_offset(self, y_offset: usize) -> (Cell, Cell) {
-        let y_offset = Cell::PIXEL_HEIGHT - y_offset;
-        let stride = Cell::PIXEL_WIDTH;
+        let y_offset = PIXEL_HEIGHT - y_offset;
+        let stride = PIXEL_WIDTH;
         let mask = (1 << (stride * y_offset)) - 1;
-        let first = (self.bits & mask) << (stride * (Cell::PIXEL_HEIGHT - y_offset));
+        let first = (self.bits & mask) << (stride * (PIXEL_HEIGHT - y_offset));
         let second = (self.bits & !mask) >> (stride * y_offset);
         (Cell::new(first), Cell::new(second))
     }
 
     /// Computes the alignment that this cell will end up in as a result of the given pixel offsets.
     /// The parameters `x_offset` and `y_offset` are taken modulo the cell's internal pixel coordinates,
-    /// i.e. [`Cell::PIXEL_WIDTH`] and [`Cell::PIXEL_HEIGHT`].
+    /// i.e. [`PIXEL_WIDTH`] and [`PIXEL_HEIGHT`].
     ///
-    /// Returns an [`Offset`] representing the new pixel data, in all the cells that it occupies space in.
+    /// Returns an [`OffsetCell`] representing the new pixel data, in all the cells that it occupies space in.
     ///
     /// All offsets are taken as nonnegative.
-    pub fn compute_offset(self, x_offset: usize, y_offset: usize) -> OffsetCell {
-        let x_offset = x_offset % Cell::PIXEL_WIDTH;
-        let y_offset = y_offset % Cell::PIXEL_HEIGHT;
+    pub fn with_offset(self, x_offset: usize, y_offset: usize) -> OffsetCell {
+        let x_offset = x_offset % PIXEL_WIDTH;
+        let y_offset = y_offset % PIXEL_HEIGHT;
         match (x_offset, y_offset) {
-            (0, 0) => OffsetCell::Aligned(self),
+            (0, 0) => OffsetCell::Aligned { cell: self },
             (1, 0) => {
                 let (left, right) = self.compute_x_offset(x_offset);
-                OffsetCell::Horizontal(left, right)
+                OffsetCell::Horizontal { left, right }
             }
             (0, _) => {
-                let (top, bottom) = self.compute_y_offset(y_offset);
-                OffsetCell::Vertical(top, bottom)
+                let (up, down) = self.compute_y_offset(y_offset);
+                OffsetCell::Vertical { up, down }
             }
             (1, _) => {
                 let (top, bottom) = self.compute_y_offset(y_offset);
-                let (top_left, top_right) = top.compute_x_offset(x_offset);
-                let (bottom_left, bottom_right) = bottom.compute_x_offset(x_offset);
-                OffsetCell::Corner(top_left, top_right, bottom_left, bottom_right)
+                let (ul, ur) = top.compute_x_offset(x_offset);
+                let (dl, dr) = bottom.compute_x_offset(x_offset);
+                OffsetCell::Corner { ul, ur, dl, dr }
             }
             _ => unreachable!(),
         }

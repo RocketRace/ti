@@ -2,7 +2,7 @@
 //! Contains the [`Screen`] type and its public interface.
 
 use crate::{
-    cell::{Cell, OffsetCell, BRAILLE_UTF8_BYTES},
+    cell::{Cell, BRAILLE_UTF8_BYTES, PIXEL_HEIGHT, PIXEL_WIDTH},
     sprite::Sprite,
 };
 
@@ -47,16 +47,16 @@ fn div_ceil(a: usize, b: usize) -> usize {
 impl Screen {
     /// Create a new empty screen with the given dimensions in pixels.
     /// The resulting width and height are rounded up to the nearest multiple of
-    /// [`Cell::PIXEL_WIDTH`] and [`Cell::PIXEL_HEIGHT`].
+    /// [`PIXEL_WIDTH`] and [`PIXEL_HEIGHT`].
     pub fn new(width: usize, height: usize) -> Self {
         Self {
             cells: vec![
                 Cell::default();
-                div_ceil(width, Cell::PIXEL_WIDTH) * div_ceil(height, Cell::PIXEL_HEIGHT)
+                div_ceil(width, PIXEL_WIDTH) * div_ceil(height, PIXEL_HEIGHT)
             ],
             updates: vec![
                 Cell::default();
-                div_ceil(width, Cell::PIXEL_WIDTH) * div_ceil(height, Cell::PIXEL_HEIGHT)
+                div_ceil(width, PIXEL_WIDTH) * div_ceil(height, PIXEL_HEIGHT)
             ],
             width,
             height,
@@ -65,11 +65,11 @@ impl Screen {
 
     /// Compute the height of the screen, in number of cells. This is a divisor of its pixel height.
     pub fn height_cells(&self) -> usize {
-        div_ceil(self.height, Cell::PIXEL_HEIGHT)
+        div_ceil(self.height, PIXEL_HEIGHT)
     }
     /// Compute the width of the screen, in number of cells. This is a divisor of its pixel width.
     pub fn width_cells(&self) -> usize {
-        div_ceil(self.width, Cell::PIXEL_WIDTH)
+        div_ceil(self.width, PIXEL_WIDTH)
     }
     /// Compute the height of the screen, in number of pixels. This is a multiple of its cell height.
     pub fn height_pixels(&self) -> usize {
@@ -85,10 +85,10 @@ impl Screen {
     }
 
     fn pixel_index(&self, x: usize, y: usize) -> (usize, u8) {
-        let index = self.cell_index(x / Cell::PIXEL_WIDTH, y / Cell::PIXEL_HEIGHT);
-        let x_pixel = x % Cell::PIXEL_WIDTH;
-        let y_pixel = y % Cell::PIXEL_HEIGHT;
-        let pixel = 1 << ((y_pixel * Cell::PIXEL_WIDTH) + x_pixel);
+        let index = self.cell_index(x / PIXEL_WIDTH, y / PIXEL_HEIGHT);
+        let x_pixel = x % PIXEL_WIDTH;
+        let y_pixel = y % PIXEL_HEIGHT;
+        let pixel = 1 << ((y_pixel * PIXEL_WIDTH) + x_pixel);
         (index, pixel)
     }
 
@@ -137,9 +137,9 @@ impl Screen {
     /// * [`Blit::Toggle`] => Flip the pixels on the screen where the sprite is set.
     ///
     /// Returns `true` if the coordinates were valid, and `false` if the given coordinate was out of bounds.
-    pub fn draw_cell(&mut self, cell: Cell, cell_x: usize, cell_y: usize, blit: Blit) -> bool {
-        if cell_x < self.width_cells() && cell_y < self.height_cells() {
-            let index = self.cell_index(cell_x, cell_y);
+    pub fn draw_cell(&mut self, cell: Cell, x: usize, y: usize, blit: Blit) -> bool {
+        if x < self.width_cells() && y < self.height_cells() {
+            let index = self.cell_index(x, y);
             let orig = self.cells[index].bits;
             self.cells[index].bits = match blit {
                 Blit::Unset => !cell.bits,
@@ -154,40 +154,25 @@ impl Screen {
         }
     }
 
-    /// Draws an [`OffsetCell`] to the screen at the given cell position. This is same as [`Screen::draw_cell`],
-    /// except that instead of a grid-aligned cell, the target of drawing is a cell that is potentially unaligned.
-    pub fn draw_cell_unaligned(
+    /// Draws a single sprite to the screen. The x and y coordinates are specified in pixels,
+    /// and refer to the top left corner of the sprite.
+    ///
+    /// Returns `false` if any part of the sprite was clipped by the screen boundaries, `true` otherwise.
+    pub fn draw_sprite(
         &mut self,
-        offset: OffsetCell,
-        cell_x: usize,
-        cell_y: usize,
+        sprite: Sprite,
+        x_pixel: usize,
+        y_pixel: usize,
         blit: Blit,
     ) -> bool {
-        // todo: delete this and use sprites primarily
-        let cells = match offset {
-            OffsetCell::Aligned(cell) => [Some((cell, 0, 0)), None, None, None],
-            OffsetCell::Horizontal(left, right) => {
-                [Some((left, 0, 0)), Some((right, 1, 0)), None, None]
-            }
-            OffsetCell::Vertical(top, bottom) => {
-                [Some((top, 0, 0)), Some((bottom, 0, 1)), None, None]
-            }
-            OffsetCell::Corner(tl, tr, bl, br) => [
-                Some((tl, 0, 0)),
-                Some((tr, 1, 0)),
-                Some((bl, 0, 1)),
-                Some((br, 1, 1)),
-            ],
-        };
-        let mut acc = true;
-        for (cell, x, y) in cells.into_iter().flatten() {
-            acc &= self.draw_cell(cell, cell_x + x, cell_y + y, blit);
-        }
-        acc
-    }
-
-    pub fn draw_sprite(&mut self, sprite: Sprite, pixel_x: usize, pixel_y: usize) {
-        let offset = (pixel_x % Cell::PIXEL_WIDTH, pixel_y % Cell::PIXEL_HEIGHT);
+        let offset = (y_pixel % PIXEL_HEIGHT) * PIXEL_WIDTH + (x_pixel % PIXEL_WIDTH);
+        let choice = &sprite.offsets[offset];
+        let sprite_width = sprite.width_cells[offset];
+        choice.iter().enumerate().fold(true, |acc, (i, cell)| {
+            let y_cell = y_pixel / PIXEL_HEIGHT + i / sprite_width;
+            let x_cell = x_pixel / PIXEL_WIDTH + i % sprite_width;
+            acc & self.draw_cell(cell.cell, x_cell, y_cell, blit)
+        })
     }
 
     /// Sets the pixel value at the given coordinates to be the given value. If `value` is
@@ -289,4 +274,10 @@ mod tests {
         assert_eq!(screen.cells[0], Cell::new(0));
         assert_eq!(screen.cells[1], Cell::new(!cell.bits));
     }
+
+    #[test]
+    fn draw_cell() {}
+
+    #[test]
+    fn draw_sprite() {}
 }

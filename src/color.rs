@@ -1,3 +1,5 @@
+use crate::cell::Cell;
+
 /// A sprite color may be specified in three different ways: as [`Color::None`],
 /// [`Color::Relaxed`], or [`Color::Forced`]. These have different behaviors when applied
 /// to a sprite.
@@ -13,4 +15,34 @@ pub enum Color {
     Relaxed(()),
     /// Color is always applied to the sprite, even if the sprite is empty.
     Forced(()),
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct ColoredCell {
+    pub cell: Cell,
+    pub color: Color,
+}
+
+impl ColoredCell {
+    pub fn new(cell: Cell) -> Self {
+        Self {
+            cell,
+            ..Default::default()
+        }
+    }
+
+    pub fn with_color(self, color: Color) -> Self {
+        Self { color, ..self }
+    }
+
+    pub fn with_cell(self, cell: Cell) -> Self {
+        Self { cell, ..self }
+    }
+
+    pub fn merge_cell(self, cell: Cell, color: Color) -> Self {
+        Self {
+            cell: self.cell | cell,
+            color,
+        }
+    }
 }
