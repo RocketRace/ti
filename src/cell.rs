@@ -36,6 +36,22 @@ pub struct Cell {
     pub bits: u8,
 }
 
+/// Represents the kind of alignment that a cell may be in. Because the pixel grid is higher resolution
+/// than the cell grid, i.e. a cell contains more than 1 pixel, trying to draw cells at precise pixel
+/// coordinates will sometimes cause the cell to be offset from the grid.
+#[derive(Debug, Clone, Copy)]
+pub enum OffsetCell {
+    /// The cell is aligned to the grid.
+    Aligned(Cell),
+    /// The cell is horizontally misaligned, i.e. occupies space in two horizontally adjacent cells.
+    Horizontal(Cell, Cell),
+    /// The cell is vertically misaligned, i.e. occupies space in two vetically adjacent cells.
+    Vertical(Cell, Cell),
+    /// The cell is both horizontally and vertically misaligned, i.e. occupies space in four adjacent cells,
+    /// around a corner.
+    Corner(Cell, Cell, Cell, Cell),
+}
+
 impl Cell {
     /// A cell is exactly 2 pixels wide, since it consists of one braille character.
     pub const PIXEL_WIDTH: usize = 2;
@@ -83,6 +99,61 @@ impl Cell {
         let mut b = [0; BRAILLE_UTF8_BYTES];
         c.encode_utf8(&mut b);
         b
+    }
+
+    fn compute_x_offset(self, x_offset: usize) -> (Cell, Cell) {
+        let mask = 0b01010101;
+        let first = (self.bits & mask) << (Cell::PIXEL_WIDTH - x_offset);
+        let second = (self.bits & !mask) >> x_offset;
+        (Cell::new(first), Cell::new(second))
+    }
+
+    fn compute_y_offset(self, y_offset: usize) -> (Cell, Cell) {
+        let y_offset = Cell::PIXEL_HEIGHT - y_offset;
+        let stride = Cell::PIXEL_WIDTH;
+        let mask = (1 << (stride * y_offset)) - 1;
+        let first = (self.bits & mask) << (stride * (Cell::PIXEL_HEIGHT - y_offset));
+        let second = (self.bits & !mask) >> (stride * y_offset);
+        (Cell::new(first), Cell::new(second))
+    }
+
+    /// Computes the alignment that this cell will end up in as a result of the given pixel offsets.
+    /// The parameters `x_offset` and `y_offset` are taken modulo the cell's internal pixel coordinates,
+    /// i.e. [`Cell::PIXEL_WIDTH`] and [`Cell::PIXEL_HEIGHT`].
+    ///
+    /// Returns an [`Offset`] representing the new pixel data, in all the cells that it occupies space in.
+    ///
+    /// All offsets are taken as nonnegative.
+    pub fn compute_offset(self, x_offset: usize, y_offset: usize) -> OffsetCell {
+        let x_offset = x_offset % Cell::PIXEL_WIDTH;
+        let y_offset = y_offset % Cell::PIXEL_HEIGHT;
+        match (x_offset, y_offset) {
+            (0, 0) => OffsetCell::Aligned(self),
+            (1, 0) => {
+                let (left, right) = self.compute_x_offset(x_offset);
+                OffsetCell::Horizontal(left, right)
+            }
+            (0, _) => {
+                let (top, bottom) = self.compute_y_offset(y_offset);
+                OffsetCell::Vertical(top, bottom)
+            }
+            (1, _) => {
+                let (top, bottom) = self.compute_y_offset(y_offset);
+                let (top_left, top_right) = top.compute_x_offset(x_offset);
+                let (bottom_left, bottom_right) = bottom.compute_x_offset(x_offset);
+                OffsetCell::Corner(top_left, top_right, bottom_left, bottom_right)
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl std::ops::BitOr for Cell {
+    type Output = Cell;
+
+    /// Creates a new cell with pixels set in either `self` or `rhs`.
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Cell::new(self.bits | rhs.bits)
     }
 }
 

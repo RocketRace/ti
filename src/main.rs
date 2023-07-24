@@ -1,7 +1,7 @@
 use ti::{
-    cell::Cell,
-    graphic::Graphic,
+    cell::{Cell, OffsetCell},
     screen::{Blit, Screen},
+    sprite::Sprite,
 };
 
 fn main() {
@@ -29,9 +29,16 @@ fn main() {
     draw_smiley(&mut screen, 16, 2);
     draw_smiley(&mut screen, 16, 4);
 
+    let block = Cell::new(0xff);
+    let offset = block.compute_offset(1, 3);
+    screen.draw_cell(block, 0, 0, Blit::Set);
+    screen.draw_cell(block, 0, 1, Blit::Set);
+    screen.draw_cell(block, 1, 0, Blit::Set);
+    screen.draw_cell_unaligned(offset, 1, 1, Blit::Set);
+
     println!("{}", std::str::from_utf8(&screen.rasterize()).unwrap());
 }
 
 fn draw_smiley(screen: &mut Screen, x: usize, y: usize) {
-    let smiley = Graphic::from_braille_string(&["⢌⣈⠄"]);
+    let smiley = Sprite::from_braille_string(&["⢌⣈⠄"]);
 }

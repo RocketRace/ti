@@ -2,8 +2,8 @@
 //! Contains the [`Screen`] type and its public interface.
 
 use crate::{
-    cell::{Cell, BRAILLE_UTF8_BYTES},
-    graphic::Graphic,
+    cell::{Cell, OffsetCell, BRAILLE_UTF8_BYTES},
+    sprite::Sprite,
 };
 
 /// Type used to write to the screen. Contains public methods
@@ -64,24 +64,24 @@ impl Screen {
     }
 
     /// Compute the height of the screen, in number of cells. This is a divisor of its pixel height.
-    pub fn cell_height(&self) -> usize {
+    pub fn height_cells(&self) -> usize {
         div_ceil(self.height, Cell::PIXEL_HEIGHT)
     }
     /// Compute the width of the screen, in number of cells. This is a divisor of its pixel width.
-    pub fn cell_width(&self) -> usize {
+    pub fn width_cells(&self) -> usize {
         div_ceil(self.width, Cell::PIXEL_WIDTH)
     }
     /// Compute the height of the screen, in number of pixels. This is a multiple of its cell height.
-    pub fn pixel_height(&self) -> usize {
+    pub fn height_pixels(&self) -> usize {
         self.height
     }
     /// Compute the width of the screen, in number of pixels. This is a multiple of its cell width.
-    pub fn pixel_width(&self) -> usize {
+    pub fn width_pixels(&self) -> usize {
         self.width
     }
 
     fn cell_index(&self, cell_x: usize, cell_y: usize) -> usize {
-        cell_y * self.cell_width() + cell_x
+        cell_y * self.width_cells() + cell_x
     }
 
     fn pixel_index(&self, x: usize, y: usize) -> (usize, u8) {
@@ -138,7 +138,7 @@ impl Screen {
     ///
     /// Returns `true` if the coordinates were valid, and `false` if the given coordinate was out of bounds.
     pub fn draw_cell(&mut self, cell: Cell, cell_x: usize, cell_y: usize, blit: Blit) -> bool {
-        if cell_x < self.cell_width() && cell_y < self.cell_height() {
+        if cell_x < self.width_cells() && cell_y < self.height_cells() {
             let index = self.cell_index(cell_x, cell_y);
             let orig = self.cells[index].bits;
             self.cells[index].bits = match blit {
@@ -154,13 +154,47 @@ impl Screen {
         }
     }
 
-    pub fn draw_graphic(&mut self, graphic: Graphic, pixel_x: usize, pixel_y: usize) {}
+    /// Draws an [`OffsetCell`] to the screen at the given cell position. This is same as [`Screen::draw_cell`],
+    /// except that instead of a grid-aligned cell, the target of drawing is a cell that is potentially unaligned.
+    pub fn draw_cell_unaligned(
+        &mut self,
+        offset: OffsetCell,
+        cell_x: usize,
+        cell_y: usize,
+        blit: Blit,
+    ) -> bool {
+        // todo: delete this and use sprites primarily
+        let cells = match offset {
+            OffsetCell::Aligned(cell) => [Some((cell, 0, 0)), None, None, None],
+            OffsetCell::Horizontal(left, right) => {
+                [Some((left, 0, 0)), Some((right, 1, 0)), None, None]
+            }
+            OffsetCell::Vertical(top, bottom) => {
+                [Some((top, 0, 0)), Some((bottom, 0, 1)), None, None]
+            }
+            OffsetCell::Corner(tl, tr, bl, br) => [
+                Some((tl, 0, 0)),
+                Some((tr, 1, 0)),
+                Some((bl, 0, 1)),
+                Some((br, 1, 1)),
+            ],
+        };
+        let mut acc = true;
+        for (cell, x, y) in cells.into_iter().flatten() {
+            acc &= self.draw_cell(cell, cell_x + x, cell_y + y, blit);
+        }
+        acc
+    }
+
+    pub fn draw_sprite(&mut self, sprite: Sprite, pixel_x: usize, pixel_y: usize) {
+        let offset = (pixel_x % Cell::PIXEL_WIDTH, pixel_y % Cell::PIXEL_HEIGHT);
+    }
 
     /// Sets the pixel value at the given coordinates to be the given value. If `value` is
     /// `true`, sets the pixel value to be 1. Otherwise, sets it to 0.
     ///
     /// **Ignores** out-of-bounds input.
-    /// This may be preferred when drawing graphics that can partially clip off screen.
+    /// This may be preferred when drawing sprites that can partially clip off screen.
     pub fn set_pixel(&mut self, x: usize, y: usize, value: bool) {
         self.draw_pixel(x, y, if value { Blit::Set } else { Blit::Unset });
     }
@@ -168,7 +202,7 @@ impl Screen {
     /// Flips the pixel value at the given coordinates to be 1.
     ///
     /// **Ignores** out-of-bounds input.
-    /// This may be preferred when drawing graphics that can partially clip off screen.
+    /// This may be preferred when drawing sprites that can partially clip off screen.
     pub fn toggle_pixel(&mut self, x: usize, y: usize) {
         self.draw_pixel(x, y, Blit::Toggle);
     }
@@ -177,14 +211,14 @@ impl Screen {
     /// Includes newlines in its output.
     pub fn rasterize(&self) -> Vec<u8> {
         // additional + height given for newline chars
-        let mut buf = vec![0; self.cells.len() * BRAILLE_UTF8_BYTES + self.cell_height()];
-        for y in 0..self.cell_height() {
-            for x in 0..self.cell_width() {
+        let mut buf = vec![0; self.cells.len() * BRAILLE_UTF8_BYTES + self.height_cells()];
+        for y in 0..self.height_cells() {
+            for x in 0..self.width_cells() {
                 let i = self.cell_index(x, y);
                 // extra newlines also counted here
                 buf[i * 3 + y..(i + 1) * 3 + y].copy_from_slice(&self.cells[i].to_braille_utf8())
             }
-            buf[(y + 1) * (self.cell_width() * 3 + 1) - 1] = b'\n';
+            buf[(y + 1) * (self.width_cells() * 3 + 1) - 1] = b'\n';
         }
         buf
     }
@@ -197,15 +231,15 @@ mod tests {
     #[test]
     fn simple_screen_size() {
         let screen = Screen::new(16, 24);
-        assert_eq!(screen.cell_width(), 8);
-        assert_eq!(screen.cell_height(), 6);
+        assert_eq!(screen.width_cells(), 8);
+        assert_eq!(screen.height_cells(), 6);
     }
 
     #[test]
     fn odd_screen_size() {
         let screen = Screen::new(3, 3);
-        assert_eq!(screen.cell_width(), 2);
-        assert_eq!(screen.cell_height(), 1);
+        assert_eq!(screen.width_cells(), 2);
+        assert_eq!(screen.height_cells(), 1);
     }
 
     #[test]
