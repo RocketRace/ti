@@ -5,7 +5,7 @@ use smallvec::{smallvec, SmallVec};
 
 use crate::{
     cell::{Cell, OffsetCell, BRAILLE_UTF8_BYTES, PIXEL_HEIGHT, PIXEL_WIDTH},
-    color::ColoredCell,
+    color::{Color, ColoredCell},
 };
 
 /// Stack allocation size for each sprite's cell data
@@ -62,64 +62,39 @@ impl Sprite {
         let mut offsets = vec![];
         for y_offset in 0..PIXEL_HEIGHT {
             for x_offset in 0..PIXEL_WIDTH {
-                let width_offset = offset_width(width_cells, y_offset * PIXEL_WIDTH + x_offset);
-                let height_offset = offset_height(height_cells, y_offset * PIXEL_WIDTH + x_offset);
+                let expanded_width = offset_width(width_cells, y_offset * PIXEL_WIDTH + x_offset);
+                let expanded_height =
+                    offset_height(height_cells, y_offset * PIXEL_WIDTH + x_offset);
 
-                let size = width_offset * height_offset;
-                let mut buf: SmallVec<[ColoredCell; 64]> = smallvec![ColoredCell::default(); size];
+                let expanded_size = expanded_width * expanded_height;
+                let mut offset_buf: SpriteData = smallvec![ColoredCell::default(); expanded_size];
                 for y_cell in 0..height_cells {
                     for x_cell in 0..width_cells {
-                        let i_cell = y_cell * width_cells + x_cell;
-                        let original = data[i_cell];
-                        match original.cell.with_offset(x_offset, y_offset) {
+                        // note: original has width `width_cells`, final has width `expanded_width`
+                        let ColoredCell { cell, color } = data[y_cell * width_cells + x_cell];
+                        let i = y_cell * expanded_width + x_cell;
+                        match cell.with_offset(x_offset, y_offset) {
                             OffsetCell::Aligned { cell } => {
-                                buf[i_cell] = ColoredCell {
-                                    cell,
-                                    color: original.color,
-                                }
+                                offset_buf[i] = ColoredCell::new(cell, color);
                             }
                             OffsetCell::Horizontal { left, right } => {
-                                buf[i_cell] = ColoredCell {
-                                    cell: buf[i_cell].cell | left,
-                                    color: original.color,
-                                };
-                                buf[i_cell + 1] = ColoredCell {
-                                    cell: right,
-                                    color: original.color,
-                                };
+                                offset_buf[i].merge_cell(left);
+                                offset_buf[i + 1] = ColoredCell::new(right, color);
                             }
                             OffsetCell::Vertical { up, down } => {
-                                buf[i_cell] = ColoredCell {
-                                    cell: buf[i_cell].cell | up,
-                                    color: original.color,
-                                };
-                                buf[i_cell + width_offset] = ColoredCell {
-                                    cell: down,
-                                    color: original.color,
-                                };
+                                offset_buf[i].merge_cell(up);
+                                offset_buf[i + expanded_width] = ColoredCell::new(down, color);
                             }
                             OffsetCell::Corner { ul, ur, dl, dr } => {
-                                buf[i_cell] = ColoredCell {
-                                    cell: buf[i_cell].cell | ul,
-                                    color: original.color,
-                                };
-                                buf[i_cell + 1] = ColoredCell {
-                                    cell: buf[i_cell + 1].cell | ur,
-                                    color: original.color,
-                                };
-                                buf[i_cell + width_offset] = ColoredCell {
-                                    cell: buf[i_cell + width_offset].cell | dl,
-                                    color: original.color,
-                                };
-                                buf[i_cell + width_offset + 1] = ColoredCell {
-                                    cell: dr,
-                                    color: original.color,
-                                };
+                                offset_buf[i].merge_cell(ul);
+                                offset_buf[i + 1].merge_cell(ur);
+                                offset_buf[i + expanded_width].merge_cell(dl);
+                                offset_buf[i + expanded_width + 1] = ColoredCell::new(dr, color);
                             }
                         }
                     }
                 }
-                offsets.push(buf);
+                offsets.push(offset_buf);
             }
         }
         Self {
@@ -148,7 +123,10 @@ impl Sprite {
                 for &row in s {
                     for c in row.chars() {
                         if let Some(cell) = Cell::from_braille(c) {
-                            data.push(ColoredCell::new(cell));
+                            data.push(ColoredCell {
+                                cell,
+                                color: Color::default(),
+                            });
                         } else {
                             return None;
                         }

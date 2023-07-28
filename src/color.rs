@@ -24,25 +24,11 @@ pub struct ColoredCell {
 }
 
 impl ColoredCell {
-    pub fn new(cell: Cell) -> Self {
-        Self {
-            cell,
-            ..Default::default()
-        }
+    pub fn new(cell: Cell, color: Color) -> Self {
+        Self { cell, color }
     }
 
-    pub fn with_color(self, color: Color) -> Self {
-        Self { color, ..self }
-    }
-
-    pub fn with_cell(self, cell: Cell) -> Self {
-        Self { cell, ..self }
-    }
-
-    pub fn merge_cell(self, cell: Cell, color: Color) -> Self {
-        Self {
-            cell: self.cell | cell,
-            color,
-        }
+    pub fn merge_cell(&mut self, cell: Cell) {
+        self.cell = self.cell | cell;
     }
 }

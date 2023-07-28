@@ -2,7 +2,7 @@
 //!
 //! See the [`Cell`] documentation for more.
 
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 /// The unicode scalar value for the first ("empty") braille codepoint.
 pub const BRAILLE_BASE_CODEPOINT: u32 = 0x2800;
@@ -43,6 +43,12 @@ impl Debug for Cell {
         f.debug_tuple("Cell::from_braille")
             .field(&std::str::from_utf8(&self.to_braille_utf8()).unwrap())
             .finish()
+    }
+}
+
+impl Display for Cell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(std::str::from_utf8(&self.to_braille_utf8()).unwrap())
     }
 }
 
