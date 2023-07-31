@@ -154,10 +154,10 @@ impl Screen {
     ) -> bool {
         let offset = (y_pixel % PIXEL_HEIGHT) * PIXEL_WIDTH + (x_pixel % PIXEL_WIDTH);
         let choice = &sprite.offsets[offset];
-        let sprite_width = sprite.width_cells[offset];
+        let (width, _) = sprite.offset_size(offset);
         choice.iter().enumerate().fold(true, |acc, (i, cell)| {
-            let y_cell = y_pixel / PIXEL_HEIGHT + i / sprite_width;
-            let x_cell = x_pixel / PIXEL_WIDTH + i % sprite_width;
+            let y_cell = y_pixel / PIXEL_HEIGHT + i / width;
+            let x_cell = x_pixel / PIXEL_WIDTH + i % width;
             acc & self.draw_cell(cell.cell, x_cell, y_cell, blit)
         })
     }

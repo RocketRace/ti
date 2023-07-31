@@ -23,27 +23,11 @@ pub struct Sprite {
     ///
     /// Note that the color data doesn't get
     pub offsets: [SpriteData; PIXEL_HEIGHT * PIXEL_WIDTH],
-    pub width_cells: [usize; PIXEL_HEIGHT * PIXEL_WIDTH],
-    pub height_cells: [usize; PIXEL_HEIGHT * PIXEL_WIDTH],
+    width: usize,
+    height: usize,
 }
 
 type SpriteData = SmallVec<[ColoredCell; SPRITE_STACK_SIZE]>;
-
-fn offset_width(width: usize, offset: usize) -> usize {
-    if offset % PIXEL_WIDTH != 0 {
-        width + 1
-    } else {
-        width
-    }
-}
-
-fn offset_height(height: usize, offset: usize) -> usize {
-    if offset / PIXEL_WIDTH != 0 {
-        height + 1
-    } else {
-        height
-    }
-}
 
 impl Sprite {
     /// Create a new empty [`Sprite`] with the given dimensions.
@@ -53,57 +37,50 @@ impl Sprite {
             offsets: array::from_fn(
                 |_| smallvec![ColoredCell::default(); width_cells * height_cells],
             ),
-            width_cells: array::from_fn(|i| offset_width(width_cells, i)),
-            height_cells: array::from_fn(|i| offset_height(height_cells, i)),
+            width: width_cells,
+            height: height_cells,
         }
     }
     /// Creates a sprite from raw data.
     pub fn new(data: SpriteData, width_cells: usize, height_cells: usize) -> Self {
-        let mut offsets = vec![];
-        for y_offset in 0..PIXEL_HEIGHT {
-            for x_offset in 0..PIXEL_WIDTH {
-                let expanded_width = offset_width(width_cells, y_offset * PIXEL_WIDTH + x_offset);
-                let expanded_height =
-                    offset_height(height_cells, y_offset * PIXEL_WIDTH + x_offset);
+        let mut this = Self::empty(width_cells, height_cells);
+        for dy in 0..PIXEL_HEIGHT {
+            for dx in 0..PIXEL_WIDTH {
+                let offset = dy * PIXEL_WIDTH + dx;
+                let (new_width, new_height) = this.offset_size(offset);
+                let new_size = new_width * new_height;
+                this.offsets[offset].resize(new_size, ColoredCell::default());
 
-                let expanded_size = expanded_width * expanded_height;
-                let mut offset_buf: SpriteData = smallvec![ColoredCell::default(); expanded_size];
-                for y_cell in 0..height_cells {
-                    for x_cell in 0..width_cells {
+                let buf = &mut this.offsets[offset];
+                for y in 0..height_cells {
+                    for x in 0..width_cells {
                         // note: original has width `width_cells`, final has width `expanded_width`
-                        let ColoredCell { cell, color } = data[y_cell * width_cells + x_cell];
-                        let i = y_cell * expanded_width + x_cell;
-                        match cell.with_offset(x_offset, y_offset) {
+                        let ColoredCell { cell, color } = data[y * width_cells + x];
+                        let i = y * new_width + x;
+                        match cell.with_offset(dx, dy) {
                             OffsetCell::Aligned { cell } => {
-                                offset_buf[i] = ColoredCell::new(cell, color);
+                                buf[i] = ColoredCell::new(cell, color);
                             }
                             OffsetCell::Horizontal { left, right } => {
-                                offset_buf[i].merge_cell(left);
-                                offset_buf[i + 1] = ColoredCell::new(right, color);
+                                buf[i].merge_cell(left);
+                                buf[i + 1] = ColoredCell::new(right, color);
                             }
                             OffsetCell::Vertical { up, down } => {
-                                offset_buf[i].merge_cell(up);
-                                offset_buf[i + expanded_width] = ColoredCell::new(down, color);
+                                buf[i].merge_cell(up);
+                                buf[i + new_width] = ColoredCell::new(down, color);
                             }
                             OffsetCell::Corner { ul, ur, dl, dr } => {
-                                offset_buf[i].merge_cell(ul);
-                                offset_buf[i + 1].merge_cell(ur);
-                                offset_buf[i + expanded_width].merge_cell(dl);
-                                offset_buf[i + expanded_width + 1] = ColoredCell::new(dr, color);
+                                buf[i].merge_cell(ul);
+                                buf[i + 1].merge_cell(ur);
+                                buf[i + new_width].merge_cell(dl);
+                                buf[i + new_width + 1] = ColoredCell::new(dr, color);
                             }
                         }
                     }
                 }
-                offsets.push(offset_buf);
             }
         }
-        Self {
-            offsets: offsets
-                .try_into()
-                .expect("Precomputed offsets should contain all 8 values"),
-            width_cells: array::from_fn(|i| offset_width(width_cells, i)),
-            height_cells: array::from_fn(|i| offset_height(height_cells, i)),
-        }
+        this
     }
 
     /// Creates a [`Sprite`] from the given sequence of braille strings.
@@ -142,5 +119,13 @@ impl Sprite {
                 }
             }
         }
+    }
+
+    /// Computes the size of a sprite's bounding box after being offset a specified amount.
+    /// Returns a `(width, height)` pair, measured in cells.
+    pub fn offset_size(&self, offset: usize) -> (usize, usize) {
+        let x = offset % PIXEL_WIDTH != 0;
+        let y = offset / PIXEL_WIDTH != 0;
+        (x as usize + self.width, y as usize + self.height)
     }
 }
