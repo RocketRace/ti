@@ -6,5 +6,13 @@ edition = "2021"
 [dependencies]
 smallvec = "1.10.0"
 
-[dev-dependencies]
-cargo-husky = "1"
+[dev-dependencies.cargo-husky]
+version = "1"
+default-features = false
+features = [
+    "run-for-all",
+    "prepush-hook",
+    "run-cargo-fmt",
+    "run-cargo-clippy",
+    "run-cargo-test",
+]
