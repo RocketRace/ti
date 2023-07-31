@@ -1,4 +1,5 @@
-//! Module for writing output to the screen.
+//! Interactions with the terminal screen.
+//!
 //! Contains the [`Screen`] type and its public interface.
 
 use crate::{
@@ -15,7 +16,7 @@ use crate::{
 /// bytes that can be written to a terminal.
 pub struct Screen {
     cells: Vec<Cell>,
-    updates: Vec<Cell>,
+    // updates: Vec<Cell>,
     width: usize,
     height: usize,
 }
@@ -43,7 +44,7 @@ impl Screen {
     pub fn new_cells(width: usize, height: usize) -> Self {
         Self {
             cells: vec![Cell::default(); width * height],
-            updates: vec![Cell::default(); width * height],
+            // updates: vec![Cell::default(); width * height],
             width,
             height,
         }
@@ -182,7 +183,7 @@ impl Screen {
     /// Clears the whole screen, setting it to white.
     pub fn clear(&mut self) {
         for cell in &mut self.cells {
-            cell.bits = 0
+            cell.bits = 0;
         }
     }
 
@@ -195,7 +196,7 @@ impl Screen {
             for x in 0..self.width() {
                 let i = self.cell_index(x, y);
                 // extra newlines also counted here
-                buf[i * 3 + y..(i + 1) * 3 + y].copy_from_slice(&self.cells[i].to_braille_utf8())
+                buf[i * 3 + y..(i + 1) * 3 + y].copy_from_slice(&self.cells[i].to_braille_utf8());
             }
             buf[(y + 1) * (self.width() * 3 + 1) - 1] = b'\n';
         }
@@ -232,7 +233,7 @@ mod tests {
             screen.set_pixel(0, i, true);
             screen.set_pixel(7, i, true);
         }
-        assert_eq!(&screen.rasterize(), "⡏⠉⠉⢹\n⣇⣀⣀⣸\n")
+        assert_eq!(&screen.rasterize(), "⡏⠉⠉⢹\n⣇⣀⣀⣸\n");
     }
 
     #[test]
@@ -256,7 +257,7 @@ mod tests {
     #[test]
     fn draw_cell() {
         let mut screen = Screen::new_cells(2, 1);
-        let cell = Cell::new(0b00111100);
+        let cell = Cell::new(0b0011_1100);
         screen.draw_cell(cell, 0, 0, Blit::Set);
         assert_eq!(screen.cells[0], cell);
         assert_eq!(screen.cells[1], Cell::new(0));

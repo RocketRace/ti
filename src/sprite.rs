@@ -1,10 +1,10 @@
-//! Module for manipulating [`Cell`]s, i.e. collections of cells with associated color information.
+//! Module for manipulating [`Sprite`]s, i.e. rectangular collections of [`Cell`]s with associated color information.
 use std::array;
 
 use smallvec::{smallvec, SmallVec};
 
 use crate::{
-    cell::{Cell, OffsetCell, BRAILLE_UTF8_BYTES, PIXEL_HEIGHT, PIXEL_WIDTH},
+    cell::{Cell, Offset, BRAILLE_UTF8_BYTES, PIXEL_HEIGHT, PIXEL_WIDTH},
     color::{Color, ColoredCell},
 };
 
@@ -58,18 +58,18 @@ impl Sprite {
                         let ColoredCell { cell, color } = data[y * width_cells + x];
                         let i = y * new_width + x;
                         match cell.with_offset(dx, dy) {
-                            OffsetCell::Aligned { cell } => {
+                            Offset::Aligned { cell } => {
                                 buf[i] = ColoredCell::new(cell, color);
                             }
-                            OffsetCell::Horizontal { left, right } => {
+                            Offset::Horizontal { left, right } => {
                                 buf[i].merge_cell(left);
                                 buf[i + 1] = ColoredCell::new(right, color);
                             }
-                            OffsetCell::Vertical { up, down } => {
+                            Offset::Vertical { up, down } => {
                                 buf[i].merge_cell(up);
                                 buf[i + new_width] = ColoredCell::new(down, color);
                             }
-                            OffsetCell::Corner { ul, ur, dl, dr } => {
+                            Offset::Corner { ul, ur, dl, dr } => {
                                 buf[i].merge_cell(ul);
                                 buf[i + 1].merge_cell(ur);
                                 buf[i + new_width].merge_cell(dl);
@@ -126,6 +126,6 @@ impl Sprite {
     pub fn offset_size(&self, offset: usize) -> (usize, usize) {
         let x = offset % PIXEL_WIDTH != 0;
         let y = offset / PIXEL_WIDTH != 0;
-        (x as usize + self.width, y as usize + self.height)
+        (usize::from(x) + self.width, usize::from(y) + self.height)
     }
 }

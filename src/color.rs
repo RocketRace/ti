@@ -1,8 +1,14 @@
+//! Methods for adding color when drawing types such as [`crate::sprite::Sprite`] and [`crate::cell::Cell`] to the screen.
+
 use crate::cell::Cell;
 
-/// A sprite color may be specified in three different ways: as [`Color::None`],
-/// [`Color::Relaxed`], or [`Color::Forced`]. These have different behaviors when applied
-/// to a sprite.
+/// Color metadata for a cell or a sprite.
+///
+/// A sprite color may be specified in three different ways:
+/// - [`Color::None`],
+/// - [`Color::Relaxed`], or
+/// - [`Color::Forced`].
+/// These have different behaviors when applied to a sprite.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Color {
     /// No color is applied to the sprite. This sprite will not assert any color in the
@@ -17,6 +23,7 @@ pub enum Color {
     Forced(()),
 }
 
+/// A [`Cell`] with associated [`Color`] data.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct ColoredCell {
     pub cell: Cell,
@@ -24,10 +31,12 @@ pub struct ColoredCell {
 }
 
 impl ColoredCell {
+    /// Creates a new [`ColoredCell`] from parameters
     pub fn new(cell: Cell, color: Color) -> Self {
         Self { cell, color }
     }
 
+    /// Combines this cell's pixel data with the argument [`Cell`] with a bitwise OR.
     pub fn merge_cell(&mut self, cell: Cell) {
         self.cell = self.cell | cell;
     }

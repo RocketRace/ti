@@ -1,4 +1,4 @@
-//! Module responsible for formatting black & white bitmaps into Unicode braille characters.
+//! A [`Cell`] is the atomic unit of rendering, and represents a bitmap drawn to the terminal.
 //!
 //! See the [`Cell`] documentation for more.
 
@@ -56,7 +56,7 @@ impl Display for Cell {
 /// than the cell grid, i.e. a cell contains more than 1 pixel, trying to draw cells at precise pixel
 /// coordinates will sometimes cause the cell to be offset from the grid.
 #[derive(Debug, Clone, Copy)]
-pub enum OffsetCell {
+pub enum Offset {
     /// The cell is aligned to the grid.
     Aligned { cell: Cell },
     /// The cell is horizontally misaligned, i.e. occupies space in two horizontally adjacent cells.
@@ -86,7 +86,7 @@ impl Cell {
 
     /// Computes the Unicode codepoint offset format of the braille character.
     pub fn braille_offset(self) -> u8 {
-        (self.bits & 0b11100001)
+        (self.bits & 0b1110_0001)
             | ((self.bits & 0b10) << 2)
             | ((self.bits & 0b100) >> 1)
             | ((self.bits & 0b1000) << 1)
@@ -99,7 +99,7 @@ impl Cell {
         let codepoint = c as u32;
         if (BRAILLE_BASE_CODEPOINT..BRAILLE_BASE_CODEPOINT + 256).contains(&codepoint) {
             let offset = (codepoint - BRAILLE_BASE_CODEPOINT) as u8;
-            let bits = (offset & 0b11100001)
+            let bits = (offset & 0b1110_0001)
                 | ((offset & 0b10) << 1)
                 | ((offset & 0b100) << 2)
                 | ((offset & 0b1000) >> 2)
@@ -123,7 +123,7 @@ impl Cell {
     }
 
     fn compute_x_offset(self, x_offset: usize) -> (Cell, Cell) {
-        let mask = 0b01010101;
+        let mask = 0b0101_0101;
         let first = (self.bits & mask) << (PIXEL_WIDTH - x_offset);
         let second = (self.bits & !mask) >> x_offset;
         (Cell::new(first), Cell::new(second))
@@ -145,24 +145,24 @@ impl Cell {
     /// Returns an [`OffsetCell`] representing the new pixel data, in all the cells that it occupies space in.
     ///
     /// All offsets are taken as nonnegative.
-    pub fn with_offset(self, x_offset: usize, y_offset: usize) -> OffsetCell {
+    pub fn with_offset(self, x_offset: usize, y_offset: usize) -> Offset {
         let x_offset = x_offset % PIXEL_WIDTH;
         let y_offset = y_offset % PIXEL_HEIGHT;
         match (x_offset, y_offset) {
-            (0, 0) => OffsetCell::Aligned { cell: self },
+            (0, 0) => Offset::Aligned { cell: self },
             (1, 0) => {
                 let (left, right) = self.compute_x_offset(x_offset);
-                OffsetCell::Horizontal { left, right }
+                Offset::Horizontal { left, right }
             }
             (0, _) => {
                 let (up, down) = self.compute_y_offset(y_offset);
-                OffsetCell::Vertical { up, down }
+                Offset::Vertical { up, down }
             }
             (1, _) => {
                 let (top, bottom) = self.compute_y_offset(y_offset);
                 let (ul, ur) = top.compute_x_offset(x_offset);
                 let (dl, dr) = bottom.compute_x_offset(x_offset);
-                OffsetCell::Corner { ul, ur, dl, dr }
+                Offset::Corner { ul, ur, dl, dr }
             }
             _ => unreachable!(),
         }
@@ -187,14 +187,14 @@ mod tests {
     #[test]
     fn unique_offset() {
         let map: HashSet<_> = (0u8..=255).map(|n| Cell::new(n).braille_offset()).collect();
-        assert_eq!(map.len(), 256)
+        assert_eq!(map.len(), 256);
     }
 
     #[test]
     fn braille_round_trip() {
-        for i in 0..=255 {
-            let c = char::from_u32(BRAILLE_BASE_CODEPOINT + i).unwrap();
-            assert_eq!(i as u8, Cell::from_braille(c).unwrap().braille_offset());
+        for i in 0..=255u8 {
+            let c = char::from_u32(BRAILLE_BASE_CODEPOINT + i as u32).unwrap();
+            assert_eq!(i, Cell::from_braille(c).unwrap().braille_offset());
             assert_eq!(
                 c,
                 std::str::from_utf8(&Cell::from_braille(c).unwrap().to_braille_utf8())
