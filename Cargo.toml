@@ -5,3 +5,6 @@ edition = "2021"
 
 [dependencies]
 smallvec = "1.10.0"
+
+[dev-dependencies]
+cargo-husky = "1"
