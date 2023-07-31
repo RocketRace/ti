@@ -4,7 +4,7 @@ use std::array;
 use smallvec::{smallvec, SmallVec};
 
 use crate::{
-    cell::{Cell, Offset, BRAILLE_UTF8_BYTES, PIXEL_HEIGHT, PIXEL_WIDTH},
+    cell::{Cell, OffsetCell, BRAILLE_UTF8_BYTES, PIXEL_HEIGHT, PIXEL_WIDTH},
     color::{Color, ColoredCell},
 };
 
@@ -58,18 +58,18 @@ impl Sprite {
                         let ColoredCell { cell, color } = data[y * width_cells + x];
                         let i = y * new_width + x;
                         match cell.with_offset(dx, dy) {
-                            Offset::Aligned { cell } => {
+                            OffsetCell::Aligned { cell } => {
                                 buf[i] = ColoredCell::new(cell, color);
                             }
-                            Offset::Horizontal { left, right } => {
+                            OffsetCell::Horizontal { left, right } => {
                                 buf[i].merge_cell(left);
                                 buf[i + 1] = ColoredCell::new(right, color);
                             }
-                            Offset::Vertical { up, down } => {
+                            OffsetCell::Vertical { up, down } => {
                                 buf[i].merge_cell(up);
                                 buf[i + new_width] = ColoredCell::new(down, color);
                             }
-                            Offset::Corner { ul, ur, dl, dr } => {
+                            OffsetCell::Corner { ul, ur, dl, dr } => {
                                 buf[i].merge_cell(ul);
                                 buf[i + 1].merge_cell(ur);
                                 buf[i + new_width].merge_cell(dl);

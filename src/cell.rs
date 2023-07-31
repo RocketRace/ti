@@ -56,7 +56,7 @@ impl Display for Cell {
 /// than the cell grid, i.e. a cell contains more than 1 pixel, trying to draw cells at precise pixel
 /// coordinates will sometimes cause the cell to be offset from the grid.
 #[derive(Debug, Clone, Copy)]
-pub enum Offset {
+pub enum OffsetCell {
     /// The cell is aligned to the grid.
     Aligned { cell: Cell },
     /// The cell is horizontally misaligned, i.e. occupies space in two horizontally adjacent cells.
@@ -145,24 +145,24 @@ impl Cell {
     /// Returns an [`OffsetCell`] representing the new pixel data, in all the cells that it occupies space in.
     ///
     /// All offsets are taken as nonnegative.
-    pub fn with_offset(self, x_offset: usize, y_offset: usize) -> Offset {
+    pub fn with_offset(self, x_offset: usize, y_offset: usize) -> OffsetCell {
         let x_offset = x_offset % PIXEL_WIDTH;
         let y_offset = y_offset % PIXEL_HEIGHT;
         match (x_offset, y_offset) {
-            (0, 0) => Offset::Aligned { cell: self },
+            (0, 0) => OffsetCell::Aligned { cell: self },
             (1, 0) => {
                 let (left, right) = self.compute_x_offset(x_offset);
-                Offset::Horizontal { left, right }
+                OffsetCell::Horizontal { left, right }
             }
             (0, _) => {
                 let (up, down) = self.compute_y_offset(y_offset);
-                Offset::Vertical { up, down }
+                OffsetCell::Vertical { up, down }
             }
             (1, _) => {
                 let (top, bottom) = self.compute_y_offset(y_offset);
                 let (ul, ur) = top.compute_x_offset(x_offset);
                 let (dl, dr) = bottom.compute_x_offset(x_offset);
-                Offset::Corner { ul, ur, dl, dr }
+                OffsetCell::Corner { ul, ur, dl, dr }
             }
             _ => unreachable!(),
         }
