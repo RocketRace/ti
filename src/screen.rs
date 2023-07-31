@@ -180,7 +180,7 @@ impl Screen {
         self.draw_pixel(x, y, Blit::Toggle);
     }
 
-    /// Clears the whole screen, setting it to white.
+    /// Clears the whole screen, setting it to empty.
     pub fn clear(&mut self) {
         for cell in &mut self.cells {
             cell.bits = 0;
