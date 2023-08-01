@@ -16,7 +16,7 @@ use crate::{
 /// bytes that can be written to a terminal.
 pub struct Screen {
     cells: Vec<Cell>,
-    // updates: Vec<Cell>,
+    deltas: Vec<Option<Cell>>,
     width: usize,
     height: usize,
 }
@@ -43,8 +43,8 @@ impl Screen {
     /// Create a new empty screen with the given dimensions in cells.
     pub fn new_cells(width: usize, height: usize) -> Self {
         Self {
-            cells: vec![Cell::default(); width * height],
-            // updates: vec![Cell::default(); width * height],
+            cells: vec![Cell::empty(); width * height],
+            deltas: vec![None; width * height],
             width,
             height,
         }
@@ -72,43 +72,6 @@ impl Screen {
         cell_y * self.width() + cell_x
     }
 
-    fn pixel_index(&self, x: usize, y: usize) -> (usize, u8) {
-        let index = self.cell_index(x / PIXEL_WIDTH, y / PIXEL_HEIGHT);
-        let x_pixel = x % PIXEL_WIDTH;
-        let y_pixel = y % PIXEL_HEIGHT;
-        let pixel = 1 << ((y_pixel * PIXEL_WIDTH) + x_pixel);
-        (index, pixel)
-    }
-
-    #[allow(unused)]
-    fn pixel_at(&self, x: usize, y: usize) -> bool {
-        let (index, pixel) = self.pixel_index(x, y);
-        self.cells[index].bits & pixel != 0
-    }
-
-    /// Transforms the pixel value at the given coordinates with a generic given blitting strategy.
-    ///
-    /// This accepts a `blit` parameter that determines how the pixel will be drawn:
-    /// * [`Blit::Set`] and [`Blit::Add`] are synonymous and cause the pixel to be set.
-    /// * [`Blit::Unset`] and [`Blit::Subtract`] are synonymous and cause the pixel to be unset.
-    /// * [`Blit::Toggle`] causes the pixel to be flipped, i.e. turned from a 1 to a 0 and vice versa.
-    ///
-    /// Returns `true` if the coordinates were valid, and `false` if the given coordinate was out of bounds.
-    pub fn draw_pixel(&mut self, x: usize, y: usize, blit: Blit) -> bool {
-        if x / PIXEL_WIDTH < self.width() && y / PIXEL_HEIGHT < self.height() {
-            let (index, pixel) = self.pixel_index(x, y);
-            let orig = self.cells[index].bits;
-            self.cells[index].bits = match blit {
-                Blit::Set | Blit::Add => orig | pixel,
-                Blit::Unset | Blit::Subtract => orig & !pixel,
-                Blit::Toggle => orig ^ pixel,
-            };
-            true
-        } else {
-            false
-        }
-    }
-
     /// Draws a [`Cell`] to the screen at a given cell position. The given x and y positions
     /// are in terms of cells.
     ///
@@ -128,18 +91,41 @@ impl Screen {
     pub fn draw_cell(&mut self, cell: Cell, x: usize, y: usize, blit: Blit) -> bool {
         if x < self.width() && y < self.height() {
             let index = self.cell_index(x, y);
-            let orig = self.cells[index].bits;
-            self.cells[index].bits = match blit {
-                Blit::Unset => !cell.bits,
-                Blit::Subtract => orig & !cell.bits,
+            let old = self.cells[index];
+            let new = Cell::new(match blit {
                 Blit::Set => cell.bits,
-                Blit::Add => orig | cell.bits,
-                Blit::Toggle => orig ^ cell.bits,
-            };
+                Blit::Unset => !cell.bits,
+                Blit::Add => old.bits | cell.bits,
+                Blit::Subtract => old.bits & !cell.bits,
+                Blit::Toggle => old.bits ^ cell.bits,
+            });
+            self.deltas[index] = Some(new);
+            self.cells[index] = new;
             true
         } else {
             false
         }
+    }
+
+    /// Transforms the pixel value at the given coordinates with a generic given blitting strategy.
+    ///
+    /// This accepts a `blit` parameter that determines how the pixel will be drawn:
+    /// * [`Blit::Set`] and [`Blit::Add`] are synonymous and cause the pixel to be set.
+    /// * [`Blit::Unset`] and [`Blit::Subtract`] are synonymous and cause the pixel to be unset.
+    /// * [`Blit::Toggle`] causes the pixel to be flipped, i.e. turned from a 1 to a 0 and vice versa.
+    ///
+    /// Returns `true` if the coordinates were valid, and `false` if the given coordinate was out of bounds.
+    pub fn draw_pixel(&mut self, x: usize, y: usize, blit: Blit) -> bool {
+        let x_cell = x / PIXEL_WIDTH;
+        let y_cell = y / PIXEL_HEIGHT;
+        // We don't want to influence the other bits
+        let blit = match blit {
+            Blit::Unset => Blit::Subtract,
+            Blit::Set => Blit::Add,
+            blit => blit,
+        };
+        let Some(cell) = Cell::from_bit_position(x % PIXEL_WIDTH, y % PIXEL_HEIGHT) else { unreachable!("unreachable") };
+        self.draw_cell(cell, x_cell, y_cell, blit)
     }
 
     /// Draws a single sprite to the screen. The x and y coordinates are specified in pixels,
@@ -169,7 +155,7 @@ impl Screen {
     /// **Ignores** out-of-bounds input.
     /// This may be preferred when drawing sprites that can partially clip off screen.
     pub fn set_pixel(&mut self, x: usize, y: usize, value: bool) {
-        self.draw_pixel(x, y, if value { Blit::Set } else { Blit::Unset });
+        self.draw_pixel(x, y, if value { Blit::Add } else { Blit::Subtract });
     }
 
     /// Flips the pixel value at the given coordinates to be 1.
@@ -184,6 +170,9 @@ impl Screen {
     pub fn clear(&mut self) {
         for cell in &mut self.cells {
             cell.bits = 0;
+        }
+        for delta in &mut self.deltas {
+            *delta = Some(Cell::empty())
         }
     }
 
@@ -207,6 +196,14 @@ impl Screen {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn pixel_at(screen: &Screen, x: usize, y: usize) -> bool {
+        let index = screen.cell_index(x / PIXEL_WIDTH, y / PIXEL_HEIGHT);
+        let x_pixel = x % PIXEL_WIDTH;
+        let y_pixel = y % PIXEL_HEIGHT;
+        let pixel = 1 << ((y_pixel * PIXEL_WIDTH) + x_pixel);
+        screen.cells[index].bits & pixel != 0
+    }
 
     #[test]
     fn simple_screen_size_pixels() {
@@ -239,19 +236,19 @@ mod tests {
     #[test]
     fn blit_types() {
         let mut screen = Screen::new_pixels(1, 1);
-        assert!(!screen.pixel_at(0, 0));
+        assert!(!pixel_at(&screen, 0, 0));
         screen.set_pixel(0, 0, true);
-        assert!(screen.pixel_at(0, 0));
+        assert!(pixel_at(&screen, 0, 0));
         screen.set_pixel(0, 0, true);
-        assert!(screen.pixel_at(0, 0));
+        assert!(pixel_at(&screen, 0, 0));
         screen.set_pixel(0, 0, false);
-        assert!(!screen.pixel_at(0, 0));
+        assert!(!pixel_at(&screen, 0, 0));
         screen.set_pixel(0, 0, false);
-        assert!(!screen.pixel_at(0, 0));
+        assert!(!pixel_at(&screen, 0, 0));
         screen.toggle_pixel(0, 0);
-        assert!(screen.pixel_at(0, 0));
+        assert!(pixel_at(&screen, 0, 0));
         screen.toggle_pixel(0, 0);
-        assert!(!screen.pixel_at(0, 0));
+        assert!(!pixel_at(&screen, 0, 0));
     }
 
     #[test]

@@ -79,9 +79,23 @@ pub const PIXEL_WIDTH: usize = 2;
 pub const PIXEL_HEIGHT: usize = 4;
 
 impl Cell {
+    /// Creates a new empty cell.
+    pub fn empty() -> Self {
+        Self { bits: 0 }
+    }
+
     /// Create a new cell with the specified internal bits.
     pub fn new(bits: u8) -> Self {
         Self { bits }
+    }
+
+    /// Create a new cell with a single bit set in the specified position.
+    pub fn from_bit_position(x: usize, y: usize) -> Option<Self> {
+        if x < PIXEL_WIDTH && y < PIXEL_HEIGHT {
+            Some(Self::new(1 << (PIXEL_WIDTH * y + x) as u8))
+        } else {
+            None
+        }
     }
 
     /// Computes the Unicode codepoint offset format of the braille character.
