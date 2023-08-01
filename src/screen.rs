@@ -124,7 +124,7 @@ impl Screen {
             Blit::Set => Blit::Add,
             blit => blit,
         };
-        let Some(cell) = Cell::from_bit_position(x % PIXEL_WIDTH, y % PIXEL_HEIGHT) else { unreachable!("unreachable") };
+        let Some(cell) = Cell::from_bit_position(x % PIXEL_WIDTH, y % PIXEL_HEIGHT) else { unreachable!() };
         self.draw_cell(cell, x_cell, y_cell, blit)
     }
 
@@ -189,7 +189,8 @@ impl Screen {
             }
             buf[(y + 1) * (self.width() * 3 + 1) - 1] = b'\n';
         }
-        String::from_utf8(buf).expect("Unreachable")
+        let Ok(s) = String::from_utf8(buf) else { unreachable!() };
+        s
     }
 }
 
