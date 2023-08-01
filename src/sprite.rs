@@ -20,8 +20,6 @@ pub struct Sprite {
     ///
     /// The heap pointers are separate because the size of a sprite (in cells) can vary
     /// depending on its offset. Still not ideal to have max 8 heap allocations per sprite.
-    ///
-    /// Note that the color data doesn't get
     pub offsets: [SpriteData; PIXEL_HEIGHT * PIXEL_WIDTH],
     width: usize,
     height: usize,
@@ -88,7 +86,7 @@ impl Sprite {
     ///
     /// Returns None if any characters in the string are non-braille, or if the rows
     /// are different lengths.
-    pub fn from_braille_string(s: &[&str]) -> Option<Self> {
+    pub fn from_braille_string(s: &[&str], color: Option<Color>) -> Option<Self> {
         if s.is_empty() {
             Some(Sprite::empty(0, 0))
         } else {
@@ -100,10 +98,7 @@ impl Sprite {
                 for &row in s {
                     for c in row.chars() {
                         if let Some(cell) = Cell::from_braille(c) {
-                            data.push(ColoredCell {
-                                cell,
-                                color: Color::default(),
-                            });
+                            data.push(ColoredCell { cell, color });
                         } else {
                             return None;
                         }

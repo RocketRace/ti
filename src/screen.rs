@@ -2,24 +2,20 @@
 //!
 //! Contains the [`Screen`] type and its public interface.
 
-use crate::{
-    cell::{Cell, BRAILLE_UTF8_BYTES, PIXEL_HEIGHT, PIXEL_WIDTH},
-    sprite::Sprite,
+use std::io::{self, stdout, Write};
+
+use crossterm::{
+    cursor::{MoveTo, MoveToColumn, MoveToRow},
+    style::SetForegroundColor,
+    terminal::EnterAlternateScreen,
+    ExecutableCommand, QueueableCommand,
 };
 
-/// Type used to write to the screen. Contains public methods
-/// to write pixels and sprites to the screen, as well as colors.
-///
-/// The point (0, 0) represents the top left pixel of the screen.
-///
-/// The [`Screen::rasterize`] method can be used to generate
-/// bytes that can be written to a terminal.
-pub struct Screen {
-    cells: Vec<Cell>,
-    deltas: Vec<Option<Cell>>,
-    width: usize,
-    height: usize,
-}
+use crate::{
+    cell::{Cell, BRAILLE_UTF8_BYTES, PIXEL_HEIGHT, PIXEL_WIDTH},
+    color::Color,
+    sprite::Sprite,
+};
 
 /// A blit type used to select the type of operation
 /// when writing to the screen. In the case of single pixels,
@@ -39,12 +35,28 @@ pub enum Blit {
     Toggle,
 }
 
+/// Type used to write to the screen. Contains public methods
+/// to write pixels and sprites to the screen, as well as colors.
+///
+/// The point (0, 0) represents the top left pixel of the screen.
+///
+/// The [`Screen::rasterize`] method can be used to generate
+/// bytes that can be written to a terminal.
+pub struct Screen {
+    cells: Vec<Cell>,
+    deltas: Vec<Option<Cell>>,
+    colors: Vec<Option<Color>>,
+    width: usize,
+    height: usize,
+}
+
 impl Screen {
     /// Create a new empty screen with the given dimensions in cells.
     pub fn new_cells(width: usize, height: usize) -> Self {
         Self {
             cells: vec![Cell::empty(); width * height],
             deltas: vec![None; width * height],
+            colors: vec![None; width * height],
             width,
             height,
         }
@@ -70,6 +82,10 @@ impl Screen {
 
     fn cell_index(&self, cell_x: usize, cell_y: usize) -> usize {
         cell_y * self.width() + cell_x
+    }
+
+    fn cell_position(&self, index: usize) -> (usize, usize) {
+        (index % self.width(), index / self.width())
     }
 
     /// Draws a [`Cell`] to the screen at a given cell position. The given x and y positions
@@ -101,6 +117,16 @@ impl Screen {
             });
             self.deltas[index] = Some(new);
             self.cells[index] = new;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn draw_cell_color(&mut self, color: Color, x: usize, y: usize) -> bool {
+        if x < self.width() && y < self.height() {
+            let index = self.cell_index(x, y);
+            self.colors[index] = Some(color);
             true
         } else {
             false
@@ -146,6 +172,11 @@ impl Screen {
             let y_cell = y_pixel / PIXEL_HEIGHT + i / width;
             let x_cell = x_pixel / PIXEL_WIDTH + i % width;
             acc & self.draw_cell(cell.cell, x_cell, y_cell, blit)
+                & if let Some(color) = cell.color {
+                    self.draw_cell_color(color, x_cell, y_cell)
+                } else {
+                    true
+                }
         })
     }
 
@@ -191,6 +222,43 @@ impl Screen {
         }
         let Ok(s) = String::from_utf8(buf) else { unreachable!() };
         s
+    }
+
+    pub fn render_screen(&mut self) -> io::Result<()> {
+        let mut stdout = stdout();
+        stdout.execute(EnterAlternateScreen)?;
+        stdout.queue(MoveTo(0, 0))?;
+        let mut cur_x = 0;
+        let mut cur_y = 0;
+        let mut cur_color = None;
+        for (i, (&delta, &color)) in self.deltas.iter().zip(self.colors.iter()).enumerate() {
+            if let Some(cell) = delta {
+                let (x, y) = self.cell_position(i);
+                match (x == cur_x, y == cur_y) {
+                    (true, true) => (),
+                    (true, false) => {
+                        stdout.queue(MoveToRow(y as u16))?;
+                    }
+                    (false, true) => {
+                        stdout.queue(MoveToColumn(x as u16))?;
+                    }
+                    (false, false) => {
+                        stdout.queue(MoveTo(x as u16, y as u16))?;
+                    }
+                }
+                if color != cur_color {
+                    if let Some(color) = color {
+                        stdout.queue(SetForegroundColor(color))?;
+                    }
+                    cur_color = color;
+                }
+                stdout.write_all(&cell.to_braille_utf8())?;
+                cur_x = x + 1;
+                cur_y = y;
+            }
+        }
+        stdout.flush()?;
+        Ok(())
     }
 }
 
@@ -270,7 +338,7 @@ mod tests {
     #[test]
     fn draw_unaliged_cell() {
         let mut screen = Screen::new_cells(2, 2);
-        let sprite = Sprite::from_braille_string(&["⣿"]).unwrap();
+        let sprite = Sprite::from_braille_string(&["⣿"], None).unwrap();
         screen.draw_sprite(&sprite, 0, 0, Blit::Set);
         // unicode escapes used because many editors don't like blank characters
         assert_eq!(screen.rasterize(), "⣿\u{2800}\n\u{2800}\u{2800}\n");
@@ -285,7 +353,7 @@ mod tests {
     #[test]
     fn toggle_unaligned_cell() {
         let mut screen = Screen::new_cells(2, 2);
-        let sprite = Sprite::from_braille_string(&["⣿"]).unwrap();
+        let sprite = Sprite::from_braille_string(&["⣿"], None).unwrap();
         screen.draw_sprite(&sprite, 0, 0, Blit::Set);
         screen.draw_sprite(&sprite, 1, 1, Blit::Toggle);
         assert_eq!(screen.rasterize(), "⡏⡆\n⠈⠁\n");
@@ -295,7 +363,7 @@ mod tests {
     fn draw_monochrome_sprite() {
         let mut screen = Screen::new_cells(3, 2);
         let s = &["⢰⣶⡆", "⠸⠿⠇"];
-        let sprite = Sprite::from_braille_string(s).unwrap();
+        let sprite = Sprite::from_braille_string(s, None).unwrap();
         screen.draw_sprite(&sprite, 0, 0, Blit::Set);
         eprintln!("{}", screen.rasterize());
         assert_eq!(screen.rasterize(), "⢰⣶⡆\n⠸⠿⠇\n");
