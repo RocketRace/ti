@@ -60,7 +60,6 @@ impl Sprite {
             for dx in 0..PIXEL_WIDTH {
                 let offset = px_offset(dx, dy);
                 let (new_width, new_height) = this.offset_size(offset);
-                println!("{new_width}, {new_height} for {offset}");
                 let new_size = cell_length(new_width, new_height);
                 this.offsets[offset as usize].resize(new_size, ColoredCell::default());
 

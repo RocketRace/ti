@@ -7,7 +7,7 @@ use std::io::{self, stdout, Write};
 use crossterm::{
     cursor::{MoveTo, MoveToColumn, MoveToRow},
     style::SetForegroundColor,
-    terminal::EnterAlternateScreen,
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand, QueueableCommand,
 };
 
@@ -127,6 +127,7 @@ impl Screen {
         }
     }
 
+    /// Sets the color of the cell at the specified position.
     pub fn draw_cell_color(&mut self, color: Color, x: u16, y: u16) -> bool {
         if x < self.width() && y < self.height() {
             let i = self.index(x, y);
@@ -222,10 +223,26 @@ impl Screen {
         s
     }
 
+    /// Enters the terminal's alternate screen.
+    pub fn enter_screen(&self) -> io::Result<()> {
+        stdout().execute(EnterAlternateScreen)?;
+        Ok(())
+    }
+
+    /// Exit's the terminal's alternate screen.
+    pub fn exit_screen(&self) -> io::Result<()> {
+        stdout().execute(LeaveAlternateScreen)?;
+        Ok(())
+    }
+
+    /// Renders the current state of the screen buffer to the terminal.
     pub fn render_screen(&mut self) -> io::Result<()> {
         let mut stdout = stdout();
-        stdout.execute(EnterAlternateScreen)?;
-        stdout.queue(MoveTo(0, 0))?;
+        self.render_screen_to(&mut stdout)
+    }
+
+    fn render_screen_to<B: Write>(&mut self, buf: &mut B) -> io::Result<()> {
+        buf.queue(MoveTo(0, 0))?;
         let mut cur_x = 0;
         let mut cur_y = 0;
         let mut cur_color = None;
@@ -235,27 +252,27 @@ impl Screen {
                 match (x == cur_x, y == cur_y) {
                     (true, true) => (),
                     (true, false) => {
-                        stdout.queue(MoveToRow(y))?;
+                        buf.queue(MoveToRow(y))?;
                     }
                     (false, true) => {
-                        stdout.queue(MoveToColumn(x))?;
+                        buf.queue(MoveToColumn(x))?;
                     }
                     (false, false) => {
-                        stdout.queue(MoveTo(x, y))?;
+                        buf.queue(MoveTo(x, y))?;
                     }
                 }
                 if color != cur_color {
                     if let Some(color) = color {
-                        stdout.queue(SetForegroundColor(color))?;
+                        buf.queue(SetForegroundColor(color))?;
                     }
                     cur_color = color;
                 }
-                stdout.write_all(&cell.to_braille_utf8())?;
+                buf.write_all(&cell.to_braille_utf8())?;
                 cur_x = x + 1;
                 cur_y = y;
             }
         }
-        stdout.flush()?;
+        buf.flush()?;
         Ok(())
     }
 }
