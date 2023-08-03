@@ -74,14 +74,16 @@ pub enum OffsetCell {
 }
 
 /// A cell is exactly 2 pixels wide, since it consists of one braille character.
-pub const PIXEL_WIDTH: usize = 2;
+pub const PIXEL_WIDTH: u8 = 2;
 /// A cell is exactly 4 pixels tall, since it consists of one braille character.
-pub const PIXEL_HEIGHT: usize = 4;
+pub const PIXEL_HEIGHT: u8 = 4;
+/// A cell has exactly 2 * 4 = 8 positions.
+pub const PIXEL_OFFSETS: u8 = PIXEL_WIDTH * PIXEL_HEIGHT;
 
 impl Cell {
     /// Creates a new empty cell.
     pub fn empty() -> Self {
-        Self { bits: 0 }
+        Self::new(0)
     }
 
     /// Create a new cell with the specified internal bits.
@@ -90,9 +92,12 @@ impl Cell {
     }
 
     /// Create a new cell with a single bit set in the specified position.
-    pub fn from_bit_position(x: usize, y: usize) -> Option<Self> {
+    ///
+    /// Returns `Some(Self)` when the bit positions fit within a single cell,
+    /// `None` otherwise.
+    pub fn from_bit_position(x: u8, y: u8) -> Option<Self> {
         if x < PIXEL_WIDTH && y < PIXEL_HEIGHT {
-            Some(Self::new(1 << (PIXEL_WIDTH * y + x) as u8))
+            Some(Self::new(1 << (PIXEL_WIDTH * y + x)))
         } else {
             None
         }
@@ -124,26 +129,30 @@ impl Cell {
         }
     }
 
+    /// Returns the braille character represented by this cell.
+    pub fn to_braille_char(self) -> char {
+        // Codepoints are always valid
+        char::from_u32(BRAILLE_BASE_CODEPOINT + self.braille_offset() as u32).unwrap()
+    }
+
     /// Encodes the cell as a sequence of UTF-8 bytes representing
-    /// its braille encoded character.
+    /// its Braille-encoded character.
     pub fn to_braille_utf8(self) -> [u8; BRAILLE_UTF8_BYTES] {
-        // The braille character block contains only 3-byte utf-8 characters.
-        // Since we can assert the range of code points here, the optimizer can take some shortcuts and,
-        // for example, elide this `unwrap()` operation.
-        let c = char::from_u32(BRAILLE_BASE_CODEPOINT + self.braille_offset() as u32).unwrap();
+        let c = self.to_braille_char();
         let mut b = [0; BRAILLE_UTF8_BYTES];
+        // The braille character block contains only 3-byte utf-8 characters, so this never panics.
         c.encode_utf8(&mut b);
         b
     }
 
-    fn compute_x_offset(self, x_offset: usize) -> (Cell, Cell) {
+    fn compute_x_offset(self, x_offset: u8) -> (Cell, Cell) {
         let mask = 0b0101_0101;
         let first = (self.bits & mask) << (PIXEL_WIDTH - x_offset);
         let second = (self.bits & !mask) >> x_offset;
         (Cell::new(first), Cell::new(second))
     }
 
-    fn compute_y_offset(self, y_offset: usize) -> (Cell, Cell) {
+    fn compute_y_offset(self, y_offset: u8) -> (Cell, Cell) {
         let y_offset = PIXEL_HEIGHT - y_offset;
         let stride = PIXEL_WIDTH;
         let mask = (1 << (stride * y_offset)) - 1;
@@ -159,7 +168,7 @@ impl Cell {
     /// Returns an [`OffsetCell`] representing the new pixel data, in all the cells that it occupies space in.
     ///
     /// All offsets are taken as nonnegative.
-    pub fn with_offset(self, x_offset: usize, y_offset: usize) -> OffsetCell {
+    pub fn with_offset(self, x_offset: u8, y_offset: u8) -> OffsetCell {
         let x_offset = x_offset % PIXEL_WIDTH;
         let y_offset = y_offset % PIXEL_HEIGHT;
         match (x_offset, y_offset) {

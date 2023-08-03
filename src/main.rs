@@ -26,7 +26,7 @@ fn main() {
     }
 }
 
-fn draw_smiley(screen: &mut Screen, x: usize, y: usize, blit: Blit) {
+fn draw_smiley(screen: &mut Screen, x: u16, y: u16, blit: Blit) {
     let smiley = Sprite::from_braille_string(&["⢌⣈⠄"], Some(Color::Green)).unwrap();
     screen.draw_sprite(&smiley, x, y, blit);
 }

@@ -4,8 +4,9 @@ use std::array;
 use smallvec::{smallvec, SmallVec};
 
 use crate::{
-    cell::{Cell, OffsetCell, BRAILLE_UTF8_BYTES, PIXEL_HEIGHT, PIXEL_WIDTH},
+    cell::{Cell, OffsetCell, BRAILLE_UTF8_BYTES, PIXEL_HEIGHT, PIXEL_OFFSETS, PIXEL_WIDTH},
     color::{Color, ColoredCell},
+    units::{cell_length, from_index, index, offset_px, px_offset},
 };
 
 /// Stack allocation size for each sprite's cell data
@@ -20,9 +21,9 @@ pub struct Sprite {
     ///
     /// The heap pointers are separate because the size of a sprite (in cells) can vary
     /// depending on its offset. Still not ideal to have max 8 heap allocations per sprite.
-    pub offsets: [SpriteData; PIXEL_HEIGHT * PIXEL_WIDTH],
-    width: usize,
-    height: usize,
+    pub offsets: [SpriteData; PIXEL_OFFSETS as usize],
+    width: u16,
+    height: u16,
 }
 
 type SpriteData = SmallVec<[ColoredCell; SPRITE_STACK_SIZE]>;
@@ -30,48 +31,66 @@ type SpriteData = SmallVec<[ColoredCell; SPRITE_STACK_SIZE]>;
 impl Sprite {
     /// Create a new empty [`Sprite`] with the given dimensions.
     /// The width and height parameters are in terms of cells.
-    pub fn empty(width_cells: usize, height_cells: usize) -> Self {
+    pub fn empty(width_cells: u16, height_cells: u16) -> Self {
         Self {
             offsets: array::from_fn(
-                |_| smallvec![ColoredCell::default(); width_cells * height_cells],
+                |_| smallvec![ColoredCell::default(); cell_length(width_cells, height_cells)],
             ),
             width: width_cells,
             height: height_cells,
         }
     }
+
+    /// Computes the array index of the cell at position (x, y) with the given sprite offset.
+    pub const fn index(&self, x: u16, y: u16, offset: u8) -> usize {
+        let (width, _) = self.offset_size(offset);
+        index(x, y, width)
+    }
+
+    /// Computes the position (x, y) of a cell at a specified array index with the given sprite offset.
+    pub const fn from_index(&self, i: usize, offset: u8) -> (u16, u16) {
+        let (width, _) = self.offset_size(offset);
+        from_index(i, width)
+    }
+
     /// Creates a sprite from raw data.
-    pub fn new(data: SpriteData, width_cells: usize, height_cells: usize) -> Self {
+    pub fn new(data: SpriteData, width_cells: u16, height_cells: u16) -> Self {
         let mut this = Self::empty(width_cells, height_cells);
         for dy in 0..PIXEL_HEIGHT {
             for dx in 0..PIXEL_WIDTH {
-                let offset = dy * PIXEL_WIDTH + dx;
+                let offset = px_offset(dx, dy);
                 let (new_width, new_height) = this.offset_size(offset);
-                let new_size = new_width * new_height;
-                this.offsets[offset].resize(new_size, ColoredCell::default());
+                println!("{new_width}, {new_height} for {offset}");
+                let new_size = cell_length(new_width, new_height);
+                this.offsets[offset as usize].resize(new_size, ColoredCell::default());
 
-                let buf = &mut this.offsets[offset];
                 for y in 0..height_cells {
                     for x in 0..width_cells {
-                        // note: original has width `width_cells`, final has width `expanded_width`
-                        let ColoredCell { cell, color } = data[y * width_cells + x];
-                        let i = y * new_width + x;
+                        let i_orig = this.index(x, y, 0);
+                        let i_ul = this.index(x, y, offset);
+                        let i_ur = this.index(x + 1, y, offset);
+                        let i_dl = this.index(x, y + 1, offset);
+                        let i_dr = this.index(x + 1, y + 1, offset);
+                        let buf = &mut this.offsets[offset as usize];
+                        let ColoredCell { cell, color } = data[i_orig];
+
                         match cell.with_offset(dx, dy) {
                             OffsetCell::Aligned { cell } => {
-                                buf[i] = ColoredCell::new(cell, color);
+                                buf[i_ul] = ColoredCell::new(cell, color);
                             }
                             OffsetCell::Horizontal { left, right } => {
-                                buf[i].merge_cell(left);
-                                buf[i + 1] = ColoredCell::new(right, color);
+                                buf[i_ul].merge_cell(left);
+                                buf[i_ur] = ColoredCell::new(right, color);
                             }
                             OffsetCell::Vertical { up, down } => {
-                                buf[i].merge_cell(up);
-                                buf[i + new_width] = ColoredCell::new(down, color);
+                                buf[i_ul].merge_cell(up);
+                                buf[i_dl] = ColoredCell::new(down, color);
                             }
                             OffsetCell::Corner { ul, ur, dl, dr } => {
-                                buf[i].merge_cell(ul);
-                                buf[i + 1].merge_cell(ur);
-                                buf[i + new_width].merge_cell(dl);
-                                buf[i + new_width + 1] = ColoredCell::new(dr, color);
+                                buf[i_ul].merge_cell(ul);
+                                buf[i_ur].merge_cell(ur);
+                                buf[i_dl].merge_cell(dl);
+                                buf[i_dr] = ColoredCell::new(dr, color);
                             }
                         }
                     }
@@ -109,8 +128,10 @@ impl Sprite {
                 } else {
                     let width_cells = width_bytes / BRAILLE_UTF8_BYTES;
                     let height_cells = data.len() / width_cells;
-
-                    Some(Self::new(data, width_cells, height_cells))
+                    match (u16::try_from(width_cells), u16::try_from(height_cells)) {
+                        (Ok(w), Ok(h)) => Some(Self::new(data, w, h)),
+                        _ => None,
+                    }
                 }
             }
         }
@@ -118,9 +139,11 @@ impl Sprite {
 
     /// Computes the size of a sprite's bounding box after being offset a specified amount.
     /// Returns a `(width, height)` pair, measured in cells.
-    pub fn offset_size(&self, offset: usize) -> (usize, usize) {
-        let x = offset % PIXEL_WIDTH != 0;
-        let y = offset / PIXEL_WIDTH != 0;
-        (usize::from(x) + self.width, usize::from(y) + self.height)
+    ///
+    /// Overflows / panics when the sprite's original bounding box has a dimension of size
+    /// [`u16::MAX`] and the offset would increment its width.
+    pub const fn offset_size(&self, offset: u8) -> (u16, u16) {
+        let (x, y) = offset_px(offset);
+        ((x != 0) as u16 + self.width, (y != 0) as u16 + self.height)
     }
 }

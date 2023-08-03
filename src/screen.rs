@@ -15,6 +15,7 @@ use crate::{
     cell::{Cell, BRAILLE_UTF8_BYTES, PIXEL_HEIGHT, PIXEL_WIDTH},
     color::Color,
     sprite::Sprite,
+    units::{cell_length, from_index, index, pos_components, px_offset},
 };
 
 /// A blit type used to select the type of operation
@@ -46,17 +47,17 @@ pub struct Screen {
     cells: Vec<Cell>,
     deltas: Vec<Option<Cell>>,
     colors: Vec<Option<Color>>,
-    width: usize,
-    height: usize,
+    width: u16,
+    height: u16,
 }
 
 impl Screen {
     /// Create a new empty screen with the given dimensions in cells.
-    pub fn new_cells(width: usize, height: usize) -> Self {
+    pub fn new_cells(width: u16, height: u16) -> Self {
         Self {
-            cells: vec![Cell::empty(); width * height],
-            deltas: vec![None; width * height],
-            colors: vec![None; width * height],
+            cells: vec![Cell::empty(); cell_length(width, height)],
+            deltas: vec![None; cell_length(width, height)],
+            colors: vec![None; cell_length(width, height)],
             width,
             height,
         }
@@ -64,28 +65,31 @@ impl Screen {
     /// Create a new empty screen with the given dimensions in pixels.
     /// The resulting width and height are rounded up to the nearest multiple of
     /// [`PIXEL_WIDTH`] and [`PIXEL_HEIGHT`].
-    pub fn new_pixels(width: usize, height: usize) -> Self {
+    pub fn new_pixels(width: u16, height: u16) -> Self {
         Self::new_cells(
-            (width + PIXEL_WIDTH - 1) / PIXEL_WIDTH,
-            (height + PIXEL_HEIGHT - 1) / PIXEL_HEIGHT,
+            (width + PIXEL_WIDTH as u16 - 1) / PIXEL_WIDTH as u16,
+            (height + PIXEL_HEIGHT as u16 - 1) / PIXEL_HEIGHT as u16,
         )
     }
 
     /// Get the height of the screen, in number of cells.
-    pub fn height(&self) -> usize {
+    pub fn height(&self) -> u16 {
         self.height
     }
+
     /// Get the width of the screen, in number of cells.
-    pub fn width(&self) -> usize {
+    pub fn width(&self) -> u16 {
         self.width
     }
 
-    fn cell_index(&self, cell_x: usize, cell_y: usize) -> usize {
-        cell_y * self.width() + cell_x
+    /// Compute the array index of a cell at position (x, y).
+    pub fn index(&self, x: u16, y: u16) -> usize {
+        index(x, y, self.width())
     }
 
-    fn cell_position(&self, index: usize) -> (usize, usize) {
-        (index % self.width(), index / self.width())
+    /// Compute the position (x, y) of a cell at the given array index.
+    pub fn from_index(&self, i: usize) -> (u16, u16) {
+        from_index(i, self.width())
     }
 
     /// Draws a [`Cell`] to the screen at a given cell position. The given x and y positions
@@ -104,9 +108,9 @@ impl Screen {
     /// * [`Blit::Toggle`] => Flip the pixels on the screen where the sprite is set.
     ///
     /// Returns `true` if the coordinates were valid, and `false` if the given coordinate was out of bounds.
-    pub fn draw_cell(&mut self, cell: Cell, x: usize, y: usize, blit: Blit) -> bool {
+    pub fn draw_cell(&mut self, cell: Cell, x: u16, y: u16, blit: Blit) -> bool {
         if x < self.width() && y < self.height() {
-            let index = self.cell_index(x, y);
+            let index = self.index(x, y);
             let old = self.cells[index];
             let new = Cell::new(match blit {
                 Blit::Set => cell.bits,
@@ -123,10 +127,10 @@ impl Screen {
         }
     }
 
-    pub fn draw_cell_color(&mut self, color: Color, x: usize, y: usize) -> bool {
+    pub fn draw_cell_color(&mut self, color: Color, x: u16, y: u16) -> bool {
         if x < self.width() && y < self.height() {
-            let index = self.cell_index(x, y);
-            self.colors[index] = Some(color);
+            let i = self.index(x, y);
+            self.colors[i] = Some(color);
             true
         } else {
             false
@@ -141,16 +145,15 @@ impl Screen {
     /// * [`Blit::Toggle`] causes the pixel to be flipped, i.e. turned from a 1 to a 0 and vice versa.
     ///
     /// Returns `true` if the coordinates were valid, and `false` if the given coordinate was out of bounds.
-    pub fn draw_pixel(&mut self, x: usize, y: usize, blit: Blit) -> bool {
-        let x_cell = x / PIXEL_WIDTH;
-        let y_cell = y / PIXEL_HEIGHT;
+    pub fn draw_pixel(&mut self, x: u16, y: u16, blit: Blit) -> bool {
+        let ((x_cell, x_pixel), (y_cell, y_pixel)) = pos_components(x, y);
         // We don't want to influence the other bits
         let blit = match blit {
             Blit::Unset => Blit::Subtract,
             Blit::Set => Blit::Add,
             blit => blit,
         };
-        let Some(cell) = Cell::from_bit_position(x % PIXEL_WIDTH, y % PIXEL_HEIGHT) else { unreachable!() };
+        let Some(cell) = Cell::from_bit_position(x_pixel, y_pixel) else { unreachable!() };
         self.draw_cell(cell, x_cell, y_cell, blit)
     }
 
@@ -158,20 +161,13 @@ impl Screen {
     /// and refer to the top left corner of the sprite.
     ///
     /// Returns `false` if any part of the sprite was clipped by the screen boundaries, `true` otherwise.
-    pub fn draw_sprite(
-        &mut self,
-        sprite: &Sprite,
-        x_pixel: usize,
-        y_pixel: usize,
-        blit: Blit,
-    ) -> bool {
-        let offset = (y_pixel % PIXEL_HEIGHT) * PIXEL_WIDTH + (x_pixel % PIXEL_WIDTH);
-        let choice = &sprite.offsets[offset];
-        let (width, _) = sprite.offset_size(offset);
-        choice.iter().enumerate().fold(true, |acc, (i, cell)| {
-            let y_cell = y_pixel / PIXEL_HEIGHT + i / width;
-            let x_cell = x_pixel / PIXEL_WIDTH + i % width;
-            acc & self.draw_cell(cell.cell, x_cell, y_cell, blit)
+    pub fn draw_sprite(&mut self, sprite: &Sprite, x_pixel: u16, y_pixel: u16, blit: Blit) -> bool {
+        let ((dx_cell, x_px), (dy_cell, y_px)) = pos_components(x_pixel, y_pixel);
+        let offset = px_offset(x_px, y_px);
+        let data = &sprite.offsets[offset as usize];
+        data.iter().enumerate().fold(true, |acc, (i, cell)| {
+            let (x_cell, y_cell) = sprite.from_index(i, offset);
+            acc & self.draw_cell(cell.cell, x_cell + dx_cell, y_cell + dy_cell, blit)
                 & if let Some(color) = cell.color {
                     self.draw_cell_color(color, x_cell, y_cell)
                 } else {
@@ -185,7 +181,7 @@ impl Screen {
     ///
     /// **Ignores** out-of-bounds input.
     /// This may be preferred when drawing sprites that can partially clip off screen.
-    pub fn set_pixel(&mut self, x: usize, y: usize, value: bool) {
+    pub fn set_pixel(&mut self, x: u16, y: u16, value: bool) {
         self.draw_pixel(x, y, if value { Blit::Add } else { Blit::Subtract });
     }
 
@@ -193,7 +189,7 @@ impl Screen {
     ///
     /// **Ignores** out-of-bounds input.
     /// This may be preferred when drawing sprites that can partially clip off screen.
-    pub fn toggle_pixel(&mut self, x: usize, y: usize) {
+    pub fn toggle_pixel(&mut self, x: u16, y: u16) {
         self.draw_pixel(x, y, Blit::Toggle);
     }
 
@@ -211,14 +207,16 @@ impl Screen {
     /// Includes newlines in its output.
     pub fn rasterize(&self) -> String {
         // additional + height given for newline chars
-        let mut buf = vec![0; self.cells.len() * BRAILLE_UTF8_BYTES + self.height()];
+        let mut buf = vec![0; self.cells.len() * BRAILLE_UTF8_BYTES + self.height() as usize];
         for y in 0..self.height() {
             for x in 0..self.width() {
-                let i = self.cell_index(x, y);
+                let i = self.index(x, y);
+                let y = y as usize;
                 // extra newlines also counted here
                 buf[i * 3 + y..(i + 1) * 3 + y].copy_from_slice(&self.cells[i].to_braille_utf8());
             }
-            buf[(y + 1) * (self.width() * 3 + 1) - 1] = b'\n';
+            let y = y as usize;
+            buf[(y + 1) * (self.width() as usize * 3 + 1) - 1] = b'\n';
         }
         let Ok(s) = String::from_utf8(buf) else { unreachable!() };
         s
@@ -233,17 +231,17 @@ impl Screen {
         let mut cur_color = None;
         for (i, (&delta, &color)) in self.deltas.iter().zip(self.colors.iter()).enumerate() {
             if let Some(cell) = delta {
-                let (x, y) = self.cell_position(i);
+                let (x, y) = self.from_index(i);
                 match (x == cur_x, y == cur_y) {
                     (true, true) => (),
                     (true, false) => {
-                        stdout.queue(MoveToRow(y as u16))?;
+                        stdout.queue(MoveToRow(y))?;
                     }
                     (false, true) => {
-                        stdout.queue(MoveToColumn(x as u16))?;
+                        stdout.queue(MoveToColumn(x))?;
                     }
                     (false, false) => {
-                        stdout.queue(MoveTo(x as u16, y as u16))?;
+                        stdout.queue(MoveTo(x, y))?;
                     }
                 }
                 if color != cur_color {
@@ -264,13 +262,14 @@ impl Screen {
 
 #[cfg(test)]
 mod tests {
+    use crate::units::pos_components;
+
     use super::*;
 
-    fn pixel_at(screen: &Screen, x: usize, y: usize) -> bool {
-        let index = screen.cell_index(x / PIXEL_WIDTH, y / PIXEL_HEIGHT);
-        let x_pixel = x % PIXEL_WIDTH;
-        let y_pixel = y % PIXEL_HEIGHT;
-        let pixel = 1 << ((y_pixel * PIXEL_WIDTH) + x_pixel);
+    fn pixel_at(screen: &Screen, x: u16, y: u16) -> bool {
+        let ((x_cell, x_pixel), (y_cell, y_pixel)) = pos_components(x, y);
+        let index = screen.index(x_cell, y_cell);
+        let pixel = Cell::from_bit_position(x_pixel, y_pixel).unwrap().bits;
         screen.cells[index].bits & pixel != 0
     }
 
