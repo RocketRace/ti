@@ -18,8 +18,9 @@ fn main() -> io::Result<()> {
     draw_smiley(&mut screen, 30, 12, Blit::Subtract);
     screen.enter_screen()?;
     screen.render_screen()?;
-    std::thread::sleep(Duration::from_secs(5));
+    std::thread::sleep(Duration::from_secs(3));
     screen.exit_screen()?;
+
     Ok(())
 }
 

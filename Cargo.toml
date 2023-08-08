@@ -3,17 +3,21 @@ name = "ti"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+images = ["dep:image"]
+
+# Some examples require non-default features.
+[[example]]
+name = "png_sprite"
+required-features = ["images"]
+
 [dependencies]
 crossterm = "0.26.1"
+image = { version = "0.24.6", optional = true }
 smallvec = "1.10.0"
 
+# The default cargo-husky hooks are not flexible enough
 [dev-dependencies.cargo-husky]
 version = "1"
 default-features = false
-features = [
-    "run-for-all",
-    "prepush-hook",
-    "run-cargo-fmt",
-    "run-cargo-clippy",
-    "run-cargo-test",
-]
+features = ["user-hooks"]

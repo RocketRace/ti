@@ -1,7 +1,9 @@
 //! Module for manipulating [`Sprite`]s, i.e. rectangular collections of [`Cell`]s with associated color information.
+use smallvec::{smallvec, SmallVec};
 use std::array;
 
-use smallvec::{smallvec, SmallVec};
+#[cfg(feature = "images")]
+use image::{imageops::FilterType, DynamicImage, GenericImageView, Rgba};
 
 use crate::{
     cell::{Cell, OffsetCell, BRAILLE_UTF8_BYTES, PIXEL_HEIGHT, PIXEL_OFFSETS, PIXEL_WIDTH},
@@ -136,6 +138,58 @@ impl Sprite {
         }
     }
 
+    /// Reads and parses an image sprite from the specified file path.
+    ///
+    /// The file can be in any image format supported by [`image::open()`], decided by the file extension given.
+    ///
+    /// The resulting image will be rescaled to a width and height of `width_px` and `height_px` pixels, without
+    /// preserving aspect ratio. This rescaling is done with nearest neighbor sampling.
+    ///
+    /// The pixels in the output image are all "on" (in terms of their [`Cell`] representation). The colors in the
+    /// input image are reflected in the *cell colors* of the output sprite.
+    ///
+    #[cfg(feature = "images")]
+    pub fn from_rgb_image_path<P: AsRef<std::path::Path>>(
+        path: P,
+        width_px: u16,
+        height_px: u16,
+    ) -> image::ImageResult<Self> {
+        Ok(Self::from_image_data_rgb_resize(
+            image::open(path)?,
+            width_px,
+            height_px,
+            FilterType::Nearest,
+            FilterType::Nearest,
+        ))
+    }
+
+    /// Parses a sprite from dynamic image data.
+    ///
+    /// The `rescale_filter` declares the method used to resize the
+    #[cfg(feature = "images")]
+    fn from_image_data_rgb_resize(
+        img: DynamicImage,
+        width_px: u16,
+        height_px: u16,
+        rescale_filter: FilterType,
+        downscale_filter: FilterType,
+    ) -> Self {
+        let width_cells = width_px / PIXEL_WIDTH as u16;
+        let height_cells = height_px / PIXEL_HEIGHT as u16;
+        let resized = img.resize_exact(width_px as u32, height_px as u32, rescale_filter);
+
+        let colors =
+            resized.resize_exact(width_cells as u32, height_cells as u32, downscale_filter);
+        let mut data = smallvec![ColoredCell::default(); cell_length(width_cells, height_cells)];
+
+        for (x, y, Rgba([r, g, b, _])) in colors.pixels() {
+            let index = index(x as u16, y as u16, width_cells);
+            data[index] = ColoredCell::new(Cell::new(0xff), Some(Color::Rgb { r, g, b }));
+        }
+
+        Sprite::new(data, width_cells, height_cells)
+    }
+
     /// Computes the size of a sprite's bounding box after being offset a specified amount.
     /// Returns a `(width, height)` pair, measured in cells.
     ///
@@ -144,5 +198,23 @@ impl Sprite {
     pub const fn offset_size(&self, offset: u8) -> (u16, u16) {
         let (x, y) = offset_px(offset);
         ((x != 0) as u16 + self.width, (y != 0) as u16 + self.height)
+    }
+}
+
+#[cfg(all(test, feature = "images"))]
+mod image_tests {
+    use crate::screen::Screen;
+
+    use super::*;
+
+    #[test]
+    fn sprite_image_from_path() {
+        let sprite =
+            Sprite::from_rgb_image_path("examples/sprite.png", 24, 24).expect("png failure");
+        assert_eq!(sprite.height, 6);
+        assert_eq!(sprite.width, 12);
+        let mut screen = Screen::new_cells(12, 6);
+        screen.draw_sprite(&sprite, 0, 0, crate::screen::Blit::Set);
+        screen.rasterize();
     }
 }
