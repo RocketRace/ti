@@ -27,7 +27,7 @@ lit and unlit pixels sufficiently. In that case, this repository also includes t
 - [ ] A simple rendering loop
 - [ ] Read input
 - [ ] When drawing a standalone frame, ensure there's enough space
-- [ ] Better braille font, and a guide on it maybe
+- [x] Better braille font, and a guide on it maybe
 - [ ] Examples in docstrings
 
 [documentation]: https://example.com
