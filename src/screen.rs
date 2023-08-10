@@ -22,12 +22,40 @@ use crate::{
 /// when writing to the screen. In the case of single pixels,
 /// this is used to determine whether the output pixel is
 /// set to 1, set to 0 or flipped.
+///
+/// # Examples
+///
+/// ```
+/// use ti::screen::{Screen, Blit};
+///
+/// let mut screen = Screen::new_cells(1, 1);
+///
+/// // Override regardless of previous
+/// screen.draw_pixel(0, 0, Blit::Set);
+/// assert_eq!(screen.get_pixel(0, 0), Some(true));
+///
+/// // Override (negatively) regardless of previous
+/// screen.draw_pixel(0, 0, Blit::Unset);
+/// assert_eq!(screen.get_pixel(0, 0), Some(false));
+///
+/// // Set only true values in input to true
+/// screen.draw_pixel(0, 0, Blit::Add);
+/// assert_eq!(screen.get_pixel(0, 0), Some(true));
+///
+/// // Set only true values in input to false
+/// screen.draw_pixel(0, 0, Blit::Subtract);
+/// assert_eq!(screen.get_pixel(0, 0), Some(false));
+///
+/// // Flip true values in input
+/// screen.draw_pixel(0, 0, Blit::Toggle);
+/// assert_eq!(screen.get_pixel(0, 0), Some(true));
+/// ```
 #[derive(Clone, Copy)]
 pub enum Blit {
-    /// Sets the output to 0 where the input is set, and 1 elsewhere.
-    Unset,
     /// Sets the output to 1 where the input is set, and 0 elsewhere.
     Set,
+    /// Sets the output to 0 where the input is set, and 1 elsewhere.
+    Unset,
     /// Sets the output to 1 where the input is set, and ignore elsewhere.
     Add,
     /// Sets the output to 0 where the input is set, and ignore elsewhere.
@@ -43,6 +71,14 @@ pub enum Blit {
 ///
 /// The [`Screen::rasterize`] method can be used to generate
 /// bytes that can be written to a terminal.
+///
+/// # Examples
+///
+/// ```
+/// use ti::screen::Screen;
+///
+/// let screen = Screen::new_cells(2, 2);
+/// ```
 pub struct Screen {
     cells: Vec<Cell>,
     deltas: Vec<Option<Cell>>,
@@ -53,6 +89,16 @@ pub struct Screen {
 
 impl Screen {
     /// Create a new empty screen with the given dimensions in cells.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ti::screen::Screen;
+    ///
+    /// let screen = Screen::new_cells(2, 3);
+    /// assert_eq!(screen.width(), 2);
+    /// assert_eq!(screen.height(), 3);
+    /// ```
     pub fn new_cells(width: u16, height: u16) -> Self {
         Self {
             cells: vec![Cell::empty(); cell_length(width, height)],
@@ -65,6 +111,16 @@ impl Screen {
     /// Create a new empty screen with the given dimensions in pixels.
     /// The resulting width and height are rounded up to the nearest multiple of
     /// [`PIXEL_WIDTH`] and [`PIXEL_HEIGHT`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ti::screen::Screen;
+    ///
+    /// let screen = Screen::new_pixels(3, 10);
+    /// assert_eq!(screen.width(), 2);
+    /// assert_eq!(screen.height(), 3);
+    /// ```
     pub fn new_pixels(width: u16, height: u16) -> Self {
         Self::new_cells(
             (width + PIXEL_WIDTH as u16 - 1) / PIXEL_WIDTH as u16,
@@ -72,22 +128,58 @@ impl Screen {
         )
     }
 
-    /// Get the height of the screen, in number of cells.
-    pub fn height(&self) -> u16 {
-        self.height
-    }
-
     /// Get the width of the screen, in number of cells.
+    /// # Examples
+    ///
+    /// ```
+    /// use ti::screen::Screen;
+    ///
+    /// let screen = Screen::new_cells(2, 3);
+    /// assert_eq!(screen.width(), 2);
+    /// ```
     pub fn width(&self) -> u16 {
         self.width
     }
 
+    /// Get the height of the screen, in number of cells.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ti::screen::Screen;
+    ///
+    /// let screen = Screen::new_cells(2, 3);
+    /// assert_eq!(screen.height(), 3);
+    /// ```
+    pub fn height(&self) -> u16 {
+        self.height
+    }
+
     /// Compute the array index of a cell at position (x, y).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ti::screen::Screen;
+    ///
+    /// let screen = Screen::new_cells(4, 2);
+    /// let index = screen.index(0, 1);
+    /// assert_eq!(index, 4);
+    /// ```
     pub fn index(&self, x: u16, y: u16) -> usize {
         index(x, y, self.width())
     }
 
     /// Compute the position (x, y) of a cell at the given array index.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ti::screen::Screen;
+    ///
+    /// let screen = Screen::new_cells(4, 2);
+    /// assert_eq!(screen.from_index(6), (2, 1));
+    /// ```
     pub fn from_index(&self, i: usize) -> (u16, u16) {
         from_index(i, self.width())
     }
@@ -108,6 +200,25 @@ impl Screen {
     /// * [`Blit::Toggle`] => Flip the pixels on the screen where the sprite is set.
     ///
     /// Returns `true` if the coordinates were valid, and `false` if the given coordinate was out of bounds.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ti::screen::{Screen, Blit};
+    /// use ti::cell::Cell;
+    ///
+    /// let mut screen = Screen::new_cells(4, 2);
+    /// let cell = Cell::from_braille('⢌').unwrap();
+    ///
+    /// assert!(screen.draw_cell(cell, 0, 0, Blit::Set));
+    /// assert_eq!(screen.get_cell(0, 0), Some(cell));
+    ///
+    /// assert!(!screen.draw_cell(cell, 99, 99, Blit::Set));
+    /// assert_eq!(screen.get_cell(0, 0), Some(cell));
+    ///
+    /// assert!(screen.draw_cell(cell, 0, 0, Blit::Toggle));
+    /// assert_eq!(screen.get_cell(0, 0), Some(Cell::empty()));
+    /// ```
     pub fn draw_cell(&mut self, cell: Cell, x: u16, y: u16, blit: Blit) -> bool {
         if x < self.width() && y < self.height() {
             let index = self.index(x, y);
@@ -128,6 +239,18 @@ impl Screen {
     }
 
     /// Sets the color of the cell at the specified position.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ti::screen::Screen;
+    /// use ti::color::Color;
+    ///
+    /// let mut screen = Screen::new_cells(2, 1);
+    /// let color = Color::AnsiValue(23);
+    /// assert!(screen.draw_cell_color(color, 1, 0));
+    /// assert_eq!(screen.get_color(1, 0), Some(color));
+    /// ```
     pub fn draw_cell_color(&mut self, color: Color, x: u16, y: u16) -> bool {
         if x < self.width() && y < self.height() {
             let i = self.index(x, y);
@@ -146,6 +269,16 @@ impl Screen {
     /// * [`Blit::Toggle`] causes the pixel to be flipped, i.e. turned from a 1 to a 0 and vice versa.
     ///
     /// Returns `true` if the coordinates were valid, and `false` if the given coordinate was out of bounds.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ti::screen::{Screen, Blit};
+    ///
+    /// let mut screen = Screen::new_pixels(1, 1);
+    /// assert!(screen.set_pixel(0, 0, true));
+    /// assert_eq!(screen.get_pixel(0, 0), Some(true));
+    /// ```
     pub fn draw_pixel(&mut self, x: u16, y: u16, blit: Blit) -> bool {
         let ((x_cell, x_pixel), (y_cell, y_pixel)) = pos_components(x, y);
         // We don't want to influence the other bits
@@ -156,6 +289,70 @@ impl Screen {
         };
         let Some(cell) = Cell::from_bit_position(x_pixel, y_pixel) else { unreachable!() };
         self.draw_cell(cell, x_cell, y_cell, blit)
+    }
+
+    /// Returns the cell value at the specified (cell) coordinates. Returns None if out of bounds.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ti::screen::Screen;
+    /// use ti::cell::Cell;
+    ///
+    /// let screen = Screen::new_cells(2, 2);
+    /// assert_eq!(screen.get_cell(4, 6), None);
+    /// assert_eq!(screen.get_cell(0, 1), Some(Cell::empty()));
+    /// ```
+    pub fn get_cell(&self, x: u16, y: u16) -> Option<Cell> {
+        if x < self.width() && y < self.height() {
+            let index = self.index(x, y);
+            Some(self.cells[index])
+        } else {
+            None
+        }
+    }
+
+    /// Returns the color at of the cell at the specified coordinates. Returns None if out of bounds.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ti::screen::Screen;
+    /// use ti::color::Color;
+    ///
+    /// let mut screen = Screen::new_cells(2, 2);
+    /// let color = Color::AnsiValue(123);
+    /// assert_eq!(screen.get_color(999, 999), None);
+    /// screen.draw_cell_color(color, 0, 0);
+    /// assert_eq!(screen.get_color(0, 0), Some(color));
+    /// ```
+    pub fn get_color(&self, x: u16, y: u16) -> Option<Color> {
+        if x < self.width() && y < self.height() {
+            let index = self.index(x, y);
+            self.colors[index]
+        } else {
+            None
+        }
+    }
+
+    /// Returns the pixel value at the specified (pixel) coordinates. Returns None if out of bounds.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ti::screen::Screen;
+    ///
+    /// let mut screen = Screen::new_cells(1, 1);
+    /// screen.set_pixel(0, 0, true);
+    /// assert_eq!(screen.get_pixel(0, 0), Some(true));
+    /// assert_eq!(screen.get_pixel(1, 0), Some(false));
+    /// assert_eq!(screen.get_pixel(99, 0), None);
+    /// ```
+    pub fn get_pixel(&self, x: u16, y: u16) -> Option<bool> {
+        let ((x_cell, x_pixel), (y_cell, y_pixel)) = pos_components(x, y);
+        let Some(mask) = Cell::from_bit_position(x_pixel, y_pixel) else { unreachable!() };
+        self.get_cell(x_cell, y_cell)
+            .map(|cell| cell.bits & mask.bits != 0)
     }
 
     /// Draws a single sprite to the screen. The x and y coordinates are specified in pixels,
@@ -182,16 +379,16 @@ impl Screen {
     ///
     /// **Ignores** out-of-bounds input.
     /// This may be preferred when drawing sprites that can partially clip off screen.
-    pub fn set_pixel(&mut self, x: u16, y: u16, value: bool) {
-        self.draw_pixel(x, y, if value { Blit::Add } else { Blit::Subtract });
+    pub fn set_pixel(&mut self, x: u16, y: u16, value: bool) -> bool {
+        self.draw_pixel(x, y, if value { Blit::Add } else { Blit::Subtract })
     }
 
     /// Flips the pixel value at the given coordinates to be 1.
     ///
     /// **Ignores** out-of-bounds input.
     /// This may be preferred when drawing sprites that can partially clip off screen.
-    pub fn toggle_pixel(&mut self, x: u16, y: u16) {
-        self.draw_pixel(x, y, Blit::Toggle);
+    pub fn toggle_pixel(&mut self, x: u16, y: u16) -> bool {
+        self.draw_pixel(x, y, Blit::Toggle)
     }
 
     /// Clears the whole screen, setting it to empty.
@@ -238,10 +435,11 @@ impl Screen {
     /// Renders the current state of the screen buffer to the terminal.
     pub fn render_screen(&mut self) -> io::Result<()> {
         let mut stdout = stdout();
-        self.render_screen_to(&mut stdout)
+        self.write_screen_to(&mut stdout)
     }
 
-    fn render_screen_to<B: Write>(&mut self, buf: &mut B) -> io::Result<()> {
+    /// Renders the current state of the screen to some writable buffer.
+    pub fn write_screen_to<B: Write>(&mut self, buf: &mut B) -> io::Result<()> {
         buf.queue(MoveTo(0, 0))?;
         let mut cur_x = 0;
         let mut cur_y = 0;
@@ -279,16 +477,7 @@ impl Screen {
 
 #[cfg(test)]
 mod tests {
-    use crate::units::pos_components;
-
     use super::*;
-
-    fn pixel_at(screen: &Screen, x: u16, y: u16) -> bool {
-        let ((x_cell, x_pixel), (y_cell, y_pixel)) = pos_components(x, y);
-        let index = screen.index(x_cell, y_cell);
-        let pixel = Cell::from_bit_position(x_pixel, y_pixel).unwrap().bits;
-        screen.cells[index].bits & pixel != 0
-    }
 
     #[test]
     fn simple_screen_size_pixels() {
@@ -321,19 +510,19 @@ mod tests {
     #[test]
     fn blit_types() {
         let mut screen = Screen::new_pixels(1, 1);
-        assert!(!pixel_at(&screen, 0, 0));
+        assert_eq!(screen.get_pixel(0, 0), Some(false));
         screen.set_pixel(0, 0, true);
-        assert!(pixel_at(&screen, 0, 0));
+        assert_eq!(screen.get_pixel(0, 0), Some(true));
         screen.set_pixel(0, 0, true);
-        assert!(pixel_at(&screen, 0, 0));
+        assert_eq!(screen.get_pixel(0, 0), Some(true));
         screen.set_pixel(0, 0, false);
-        assert!(!pixel_at(&screen, 0, 0));
+        assert_eq!(screen.get_pixel(0, 0), Some(false));
         screen.set_pixel(0, 0, false);
-        assert!(!pixel_at(&screen, 0, 0));
+        assert_eq!(screen.get_pixel(0, 0), Some(false));
         screen.toggle_pixel(0, 0);
-        assert!(pixel_at(&screen, 0, 0));
+        assert_eq!(screen.get_pixel(0, 0), Some(true));
         screen.toggle_pixel(0, 0);
-        assert!(!pixel_at(&screen, 0, 0));
+        assert_eq!(screen.get_pixel(0, 0), Some(false));
     }
 
     #[test]
