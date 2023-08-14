@@ -247,7 +247,7 @@ impl Screen {
     /// use ti::color::Color;
     ///
     /// let mut screen = Screen::new_cells(2, 1);
-    /// let color = Color::AnsiValue(23);
+    /// let color = Color::new(23);
     /// assert!(screen.draw_cell_color(color, 1, 0));
     /// assert_eq!(screen.get_color(1, 0), Some(color));
     /// ```
@@ -321,7 +321,7 @@ impl Screen {
     /// use ti::color::Color;
     ///
     /// let mut screen = Screen::new_cells(2, 2);
-    /// let color = Color::AnsiValue(123);
+    /// let color = Color::new(123);
     /// assert_eq!(screen.get_color(999, 999), None);
     /// screen.draw_cell_color(color, 0, 0);
     /// assert_eq!(screen.get_color(0, 0), Some(color));
@@ -461,7 +461,7 @@ impl Screen {
                 }
                 if color != cur_color {
                     if let Some(color) = color {
-                        buf.queue(SetForegroundColor(color))?;
+                        buf.queue(SetForegroundColor(color.to_crossterm_color()))?;
                     }
                     cur_color = color;
                 }

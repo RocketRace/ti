@@ -165,7 +165,8 @@ impl Sprite {
 
     /// Parses a sprite from dynamic image data.
     ///
-    /// The `rescale_filter` declares the method used to resize the
+    /// The `rescale_filter` declares the method used to resize to a specified resolution, and `downscale_filter` declares
+    /// the method used to thumbnail each cell into a single color.
     #[cfg(feature = "images")]
     fn from_image_data_rgb_resize(
         img: DynamicImage,
@@ -184,7 +185,8 @@ impl Sprite {
 
         for (x, y, Rgba([r, g, b, _])) in colors.pixels() {
             let index = index(x as u16, y as u16, width_cells);
-            data[index] = ColoredCell::new(Cell::new(0xff), Some(Color::Rgb { r, g, b }));
+            data[index] =
+                ColoredCell::new(Cell::new(0xff), Some(Color::from_rgb_approximate(r, g, b)));
         }
 
         Sprite::new(data, width_cells, height_cells)
