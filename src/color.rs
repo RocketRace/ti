@@ -2,9 +2,153 @@
 //!
 //! This uses [`crossterm::style::Color`] to represent ANSI terminal colors.
 
+use std::cmp::Ordering;
+
+use crossterm::style;
+
 use crate::cell::Cell;
 
-pub use crossterm::style::Color;
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Color(pub u8);
+
+// RGB, GREYSCALE: These are the values most terminals seem to use
+// RGB must begin with 0 and end with 255
+const RGB: [u8; 6] = [0, 95, 135, 175, 215, 255];
+const GREYSCALE: [u8; 24] = {
+    let mut x = [0u8; 24];
+    let mut i = 0u8;
+    while i < 24 {
+        x[i as usize] = i * 10 + 8;
+        i += 1;
+    }
+    x
+};
+
+/// Picks the ANSI RGB component that's closest to the input
+fn interpolate_component(scale: &[u8], target: u8) -> u8 {
+    let next_ansi = scale
+        .iter()
+        .position(|&next| next >= target)
+        .unwrap_or(scale.len() - 1) as u8;
+    let next = scale[next_ansi as usize];
+
+    match target.cmp(&next) {
+        // either that the target was matched right on, or the default value at the end of the
+        // scale was used (which is as close as it can get)
+        Ordering::Greater | Ordering::Equal => next_ansi,
+        Ordering::Less => {
+            // implies the first value of the scale was nonzero, and the target was below it
+            if next_ansi == 0 {
+                next_ansi
+            } else {
+                let prev_ansi = next_ansi - 1;
+                let prev = scale[prev_ansi as usize];
+                // simple linear distance
+                if target - prev > next - target {
+                    next_ansi
+                } else {
+                    prev_ansi
+                }
+            }
+        }
+    }
+}
+
+/// diagonal distance from a to b
+fn dist(a: (u8, u8, u8), b: (u8, u8, u8)) -> f32 {
+    let (a_r, a_g, a_b) = a;
+    let (b_r, b_g, b_b) = b;
+    ((a_r as f32 - b_r as f32).abs().powi(3)
+        + (a_g as f32 - b_g as f32).abs().powi(3)
+        + (a_b as f32 - b_b as f32).abs().powi(3))
+    .cbrt()
+}
+
+impl Color {
+    /// Creates a new color from an 8-bit ANSI color value.
+    pub fn new(color: u8) -> Self {
+        Self(color)
+    }
+    /// Returns an ANSI color that is visually similar to the specified
+    /// RGB value. This will not always be accurate, because there are only
+    /// 256 ANSI colors compared to 256^3 RGB values.
+    ///
+    /// The process used to approximate a color is as follows:
+    /// * Find the ANSI color that is componentwise closest to the RGB triplet
+    ///   using linear distance for each component
+    /// * Find the ANSI greyscale value that is closest to the RGB triplet when
+    ///   converted to greyscale, using a simple sum of components
+    /// * Pick the option out of these two that minimizes the distance to the input
+    ///   color, using cartesian distance as a metric. (Prefer the componentwise
+    ///   option on a tie.)
+    ///
+    /// This is a very rudimentary method but computationally very simple.
+    pub fn from_rgb_approximate(r: u8, g: u8, b: u8) -> Self {
+        let components = Self::from_ansi_components(
+            interpolate_component(&RGB, r),
+            interpolate_component(&RGB, g),
+            interpolate_component(&RGB, b),
+        );
+        let greyscale = Self::from_ansi_greyscale(interpolate_component(
+            &GREYSCALE,
+            ((r as u16 + g as u16 + b as u16) / 3) as u8,
+        ));
+
+        let components_rgb = components.to_rgb_approximate();
+        let greyscale_rgb = greyscale.to_rgb_approximate();
+
+        if dist(components_rgb, (r, g, b)) > dist(greyscale_rgb, (r, g, b)) {
+            greyscale
+        } else {
+            components
+        }
+    }
+    /// Returns a new color with the specified from red, green and blue components.
+    /// Each component may span from 0 to 5 (inclusive). If any values are higher, they
+    /// are clipped to the maximum value (5).
+    pub fn from_ansi_components(r: u8, g: u8, b: u8) -> Self {
+        Self(r.min(5) * 36 + g.min(5) * 6 + b.min(5) + 16)
+    }
+    /// Returns a new color with the specified greyscale value. The value may be
+    /// between 0 and 23 (inclusive), and represents a scale from black to white.
+    /// If any values are higher, they are clipped to the maximum value (23).
+    ///
+    /// Note that most terminals will not represent 0 with black and 23 with white;
+    /// consider using `from_ansi_rgb(0, 0, 0)` and `from_ansi_rgb(5, 5, 5)` instead.
+    pub fn from_ansi_greyscale(step: u8) -> Self {
+        Self(232 + step.min(23))
+    }
+    /// Returns the approximate RGB color associated with this ANSI color.
+    ///
+    /// This is not always accurate; terminals may always choose to theme
+    /// ANSI colors differently. In particular, the standard and high-intensity
+    /// ANSI colors (color values from 0 to 15) are often altered by custom themes.
+    pub fn to_rgb_approximate(self) -> (u8, u8, u8) {
+        match self.0 {
+            0..=15 => todo!("Standard colors not supported yet"),
+            16..=231 => {
+                let offset = self.0 - 16;
+                let r = (offset / 36) % 6;
+                let g = (offset / 6) % 6;
+                let b = offset % 6;
+                (RGB[r as usize], RGB[g as usize], RGB[b as usize])
+            }
+            232..=255 => {
+                let step = self.0 - 232;
+                (
+                    GREYSCALE[step as usize],
+                    GREYSCALE[step as usize],
+                    GREYSCALE[step as usize],
+                )
+            }
+        }
+    }
+
+    /// Returns the equivalent crossterm color, for the purposes of integration
+    pub fn to_crossterm_color(self) -> style::Color {
+        style::Color::AnsiValue(self.0)
+    }
+}
 
 pub struct ColorFlags {
     /// When `true`, color is applied when the cell is drawn, even if the cell is empty.
@@ -29,5 +173,80 @@ impl ColoredCell {
     /// Combines this cell's pixel data with the argument [`Cell`] with a bitwise OR.
     pub fn merge_cell(&mut self, cell: Cell) {
         self.cell = self.cell | cell;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_from_ansi_components() {
+        assert_eq!(Color::from_ansi_components(1, 2, 3), Color::new(67));
+        assert_eq!(Color::from_ansi_components(0, 0, 0), Color::new(16));
+        assert_eq!(Color::from_ansi_components(5, 5, 5), Color::new(231));
+        assert_eq!(Color::from_ansi_components(6, 7, 8), Color::new(231));
+    }
+    #[test]
+    fn test_from_ansi_greyscale() {
+        assert_eq!(Color::from_ansi_greyscale(0), Color::new(232));
+        assert_eq!(Color::from_ansi_greyscale(1), Color::new(233));
+        assert_eq!(Color::from_ansi_greyscale(10), Color::new(242));
+        assert_eq!(Color::from_ansi_greyscale(23), Color::new(255));
+        assert_eq!(Color::from_ansi_greyscale(100), Color::new(255));
+    }
+
+    #[test]
+    fn test_component_approximation_exact() {
+        assert_eq!(
+            Color::from_rgb_approximate(0, 0, 0),
+            Color::from_ansi_components(0, 0, 0)
+        );
+        assert_eq!(
+            Color::from_rgb_approximate(255, 255, 255),
+            Color::from_ansi_components(5, 5, 5)
+        );
+        assert_eq!(
+            Color::from_rgb_approximate(95, 135, 215),
+            Color::from_ansi_components(1, 2, 4)
+        )
+    }
+    #[test]
+    fn test_greyscale_approximation_exact() {
+        assert_eq!(
+            Color::from_rgb_approximate(8, 8, 8),
+            Color::from_ansi_greyscale(0)
+        );
+        assert_eq!(
+            Color::from_rgb_approximate(58, 58, 58),
+            Color::from_ansi_greyscale(5)
+        );
+        assert_eq!(
+            Color::from_rgb_approximate(238, 238, 238),
+            Color::from_ansi_greyscale(23)
+        )
+    }
+
+    #[test]
+    fn test_component_approximation() {
+        assert_eq!(
+            Color::from_rgb_approximate(1, 0, 0),
+            Color::from_ansi_components(0, 0, 0)
+        );
+        assert_eq!(
+            Color::from_rgb_approximate(129, 251, 2),
+            Color::from_ansi_components(2, 5, 0)
+        );
+    }
+    #[test]
+    fn test_greyscale_approximation() {
+        assert_eq!(
+            Color::from_rgb_approximate(64, 59, 62),
+            Color::from_ansi_greyscale(5)
+        );
+        assert_eq!(
+            Color::from_rgb_approximate(240, 241, 242),
+            Color::from_ansi_greyscale(23)
+        );
     }
 }
