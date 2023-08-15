@@ -137,7 +137,7 @@ impl Screen {
     /// let screen = Screen::new_cells(2, 3);
     /// assert_eq!(screen.width(), 2);
     /// ```
-    pub fn width(&self) -> u16 {
+    pub const fn width(&self) -> u16 {
         self.width
     }
 
@@ -151,7 +151,7 @@ impl Screen {
     /// let screen = Screen::new_cells(2, 3);
     /// assert_eq!(screen.height(), 3);
     /// ```
-    pub fn height(&self) -> u16 {
+    pub const fn height(&self) -> u16 {
         self.height
     }
 
@@ -166,7 +166,7 @@ impl Screen {
     /// let index = screen.index(0, 1);
     /// assert_eq!(index, 4);
     /// ```
-    pub fn index(&self, x: u16, y: u16) -> usize {
+    pub const fn index(&self, x: u16, y: u16) -> usize {
         index(x, y, self.width())
     }
 
@@ -180,7 +180,7 @@ impl Screen {
     /// let screen = Screen::new_cells(4, 2);
     /// assert_eq!(screen.from_index(6), (2, 1));
     /// ```
-    pub fn from_index(&self, i: usize) -> (u16, u16) {
+    pub const fn from_index(&self, i: usize) -> (u16, u16) {
         from_index(i, self.width())
     }
 

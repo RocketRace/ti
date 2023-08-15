@@ -278,6 +278,7 @@ impl Sprite {
     }
 }
 
+#[allow(unused)] // false positive from clippy
 enum ColorMode {
     Monochrome,
     Standard,
