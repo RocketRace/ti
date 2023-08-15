@@ -82,17 +82,17 @@ pub const PIXEL_OFFSETS: u8 = PIXEL_WIDTH * PIXEL_HEIGHT;
 
 impl Cell {
     /// Creates a new empty cell.
-    pub fn empty() -> Self {
+    pub const fn empty() -> Self {
         Self::new(0)
     }
 
     /// Creates a new full cell.
-    pub fn full() -> Self {
+    pub const fn full() -> Self {
         Self::new(0xff)
     }
 
     /// Create a new cell with the specified internal bits.
-    pub fn new(bits: u8) -> Self {
+    pub const fn new(bits: u8) -> Self {
         Self { bits }
     }
 
@@ -100,7 +100,7 @@ impl Cell {
     ///
     /// Returns `Some(Self)` when the bit positions fit within a single cell,
     /// `None` otherwise.
-    pub fn from_bit_position(x: u8, y: u8) -> Option<Self> {
+    pub const fn from_bit_position(x: u8, y: u8) -> Option<Self> {
         if x < PIXEL_WIDTH && y < PIXEL_HEIGHT {
             Some(Self::new(1 << (PIXEL_WIDTH * y + x)))
         } else {
@@ -109,7 +109,7 @@ impl Cell {
     }
 
     /// Computes the Unicode codepoint offset format of the braille character.
-    pub fn braille_offset(self) -> u8 {
+    pub const fn braille_offset(self) -> u8 {
         (self.bits & 0b1110_0001)
             | ((self.bits & 0b10) << 2)
             | ((self.bits & 0b100) >> 1)
@@ -150,14 +150,14 @@ impl Cell {
         b
     }
 
-    fn compute_x_offset(self, x_offset: u8) -> (Cell, Cell) {
+    const fn compute_x_offset(self, x_offset: u8) -> (Cell, Cell) {
         let mask = 0b0101_0101;
         let first = (self.bits & mask) << (PIXEL_WIDTH - x_offset);
         let second = (self.bits & !mask) >> x_offset;
         (Cell::new(first), Cell::new(second))
     }
 
-    fn compute_y_offset(self, y_offset: u8) -> (Cell, Cell) {
+    const fn compute_y_offset(self, y_offset: u8) -> (Cell, Cell) {
         let y_offset = PIXEL_HEIGHT - y_offset;
         let stride = PIXEL_WIDTH;
         let mask = (1 << (stride * y_offset)) - 1;
@@ -173,7 +173,7 @@ impl Cell {
     /// Returns an [`OffsetCell`] representing the new pixel data, in all the cells that it occupies space in.
     ///
     /// All offsets are taken as nonnegative.
-    pub fn with_offset(self, x_offset: u8, y_offset: u8) -> OffsetCell {
+    pub const fn with_offset(self, x_offset: u8, y_offset: u8) -> OffsetCell {
         let x_offset = x_offset % PIXEL_WIDTH;
         let y_offset = y_offset % PIXEL_HEIGHT;
         match (x_offset, y_offset) {

@@ -199,7 +199,7 @@ impl Color {
     /// This is not always accurate; terminals may always choose to theme
     /// ANSI colors differently. In particular, the standard and high-intensity
     /// ANSI colors (color values from 0 to 15) are often altered by custom themes.
-    pub fn to_rgb_approximate(self) -> (u8, u8, u8) {
+    pub const fn to_rgb_approximate(self) -> (u8, u8, u8) {
         match self.0 {
             // The standard colors are simple approximations, because every terminal does it differently.
             // This is a particularly simple choice of colors, following the windows XP console.
@@ -240,7 +240,7 @@ impl Color {
     }
 
     /// Returns the equivalent crossterm color, for the purposes of integration
-    pub fn to_crossterm_color(self) -> style::Color {
+    pub const fn to_crossterm_color(self) -> style::Color {
         style::Color::AnsiValue(self.0)
     }
 }
@@ -261,7 +261,7 @@ pub struct ColoredCell {
 
 impl ColoredCell {
     /// Creates a new [`ColoredCell`] from parameters
-    pub fn new(cell: Cell, color: Option<Color>) -> Self {
+    pub const fn new(cell: Cell, color: Option<Color>) -> Self {
         Self { cell, color }
     }
 

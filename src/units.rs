@@ -43,7 +43,7 @@ pub(crate) const fn index(x: u16, y: u16, width: u16) -> usize {
 }
 
 /// Converts from an array index to a (x, y) position.
-pub const fn from_index(i: usize, width: u16) -> (u16, u16) {
+pub(crate) const fn from_index(i: usize, width: u16) -> (u16, u16) {
     (
         (i as u32 % width as u32) as u16,
         (i as u32 / width as u32) as u16,
