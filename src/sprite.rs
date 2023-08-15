@@ -138,7 +138,7 @@ impl Sprite {
         }
     }
 
-    /// Reads and parses an image sprite from the specified file path.
+    /// Reads and parses an image sprite from the specified file path using RGB colors.
     ///
     /// The file can be in any image format supported by [`image::open()`], decided by the file extension given.
     ///
@@ -149,7 +149,7 @@ impl Sprite {
     /// input image are reflected in the *cell colors* of the output sprite.
     ///
     #[cfg(feature = "images")]
-    pub fn from_rgb_image_path<P: AsRef<std::path::Path>>(
+    pub fn rgb_from_image_path<P: AsRef<std::path::Path>>(
         path: P,
         width_px: u16,
         height_px: u16,
@@ -160,6 +160,26 @@ impl Sprite {
             height_px,
             FilterType::Nearest,
             FilterType::Nearest,
+            false,
+        ))
+    }
+
+    /// Reads and parses an image sprite from the specified file path using standard ANSI colors.
+    ///
+    /// This is a version of [`Sprite::rgb_from_image_path()`] that parses colors as standard colors only.
+    #[cfg(feature = "images")]
+    pub fn standard_from_image_path<P: AsRef<std::path::Path>>(
+        path: P,
+        width_px: u16,
+        height_px: u16,
+    ) -> image::ImageResult<Self> {
+        Ok(Self::from_image_data_rgb_resize(
+            image::open(path)?,
+            width_px,
+            height_px,
+            FilterType::Nearest,
+            FilterType::Nearest,
+            true,
         ))
     }
 
@@ -174,6 +194,7 @@ impl Sprite {
         height_px: u16,
         rescale_filter: FilterType,
         downscale_filter: FilterType,
+        use_only_standard_colors: bool,
     ) -> Self {
         let width_cells = width_px / PIXEL_WIDTH as u16;
         let height_cells = height_px / PIXEL_HEIGHT as u16;
@@ -185,8 +206,12 @@ impl Sprite {
 
         for (x, y, Rgba([r, g, b, _])) in colors.pixels() {
             let index = index(x as u16, y as u16, width_cells);
-            data[index] =
-                ColoredCell::new(Cell::new(0xff), Some(Color::from_rgb_approximate(r, g, b)));
+            let color = if use_only_standard_colors {
+                Color::standard_color_approximate(r, g, b)
+            } else {
+                Color::from_rgb_approximate(r, g, b)
+            };
+            data[index] = ColoredCell::new(Cell::new(0xff), Some(color));
         }
 
         Sprite::new(data, width_cells, height_cells)
@@ -212,7 +237,7 @@ mod image_tests {
     #[test]
     fn sprite_image_from_path() {
         let sprite =
-            Sprite::from_rgb_image_path("examples/sprite.png", 24, 24).expect("png failure");
+            Sprite::rgb_from_image_path("examples/sprite.png", 24, 24).expect("png failure");
         assert_eq!(sprite.height, 6);
         assert_eq!(sprite.width, 12);
         let mut screen = Screen::new_cells(12, 6);
