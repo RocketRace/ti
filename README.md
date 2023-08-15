@@ -22,7 +22,7 @@ lit and unlit pixels sufficiently. In that case, this repository also includes t
 
 ## Next steps
 
-- [ ] Convert true colors to palette colors
+- [x] Convert true colors to palette colors
 - [ ] Operations to read sprites from image files in more advanced ways
 - [ ] A simple rendering loop
 - [ ] Read input

@@ -1,7 +1,7 @@
 use std::{io, time::Duration};
 
 use ti::{
-    color::Color,
+    color::standard,
     screen::{Blit, Screen},
     sprite::Sprite,
 };
@@ -25,8 +25,6 @@ fn main() -> io::Result<()> {
 }
 
 fn draw_smiley(screen: &mut Screen, x: u16, y: u16, blit: Blit) {
-    let smiley =
-        Sprite::from_braille_string(&["⢌⣈⠄"], Some(Color::from_rgb_approximate(0, 255, 0)))
-            .unwrap();
+    let smiley = Sprite::from_braille_string(&["⢌⣈⠄"], Some(standard::GREEN)).unwrap();
     screen.draw_sprite(&smiley, x, y, blit);
 }

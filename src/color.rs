@@ -64,9 +64,44 @@ fn dist(a: (u8, u8, u8), b: (u8, u8, u8)) -> f32 {
     .cbrt()
 }
 
+macro_rules! define_standard_colors {
+    ($($name:ident $str:literal $num:literal),+) => {
+        $(
+            #[doc = "The ANSI standard"]
+            #[doc = $str]
+            #[doc = "color. Its appearance varies across terminals and themes."]
+            pub const $name: Color = Color::new($num);
+        )+
+    };
+}
+
+/// This module contains the 16 ANSI standard colors, supported by almost all terminals. If you want your program to be
+/// maximally visible on all terminals, and don't mind the colors looking slightly different, you can use these.
+pub mod standard {
+    use super::Color;
+    define_standard_colors! {
+        BLACK "black" 0,
+        RED "red" 1,
+        GREEN "green" 2,
+        YELLOW "yellow" 3,
+        BLUE "blue" 4,
+        MAGENTA "magenta" 5,
+        CYAN "cyan" 6,
+        WHITE "white" 7,
+        BRIGHT_BLACK "bright black" 8,
+        BRIGHT_RED "bright red" 9,
+        BRIGHT_GREEN "bright green" 10,
+        BRIGHT_YELLOW "bright yellow" 11,
+        BRIGHT_BLUE "bright blue" 12,
+        BRIGHT_MAGENTA "bright magenta" 13,
+        BRIGHT_CYAN "bright cyan" 14,
+        BRIGHT_WHITE "bright white" 15
+    }
+}
+
 impl Color {
     /// Creates a new color from an 8-bit ANSI color value.
-    pub fn new(color: u8) -> Self {
+    pub const fn new(color: u8) -> Self {
         Self(color)
     }
     /// Returns an ANSI color that is visually similar to the specified
@@ -125,7 +160,25 @@ impl Color {
     /// ANSI colors (color values from 0 to 15) are often altered by custom themes.
     pub fn to_rgb_approximate(self) -> (u8, u8, u8) {
         match self.0 {
-            0..=15 => todo!("Standard colors not supported yet"),
+            // The standard colors are simple approximations, because every terminal does it differently.
+            // This is a particularly simple choice of colors, following the windows XP console.
+            0 => (0, 0, 0),
+            1 => (128, 0, 0),
+            2 => (0, 128, 0),
+            3 => (128, 128, 0),
+            4 => (0, 0, 128),
+            5 => (128, 0, 128),
+            6 => (0, 128, 128),
+            7 => (192, 192, 192),
+            8 => (128, 128, 128),
+            9 => (255, 0, 0),
+            10 => (0, 255, 0),
+            11 => (255, 255, 0),
+            12 => (0, 0, 255),
+            13 => (255, 0, 255),
+            14 => (0, 255, 255),
+            15 => (255, 255, 255),
+            // 3-component (RGB) colors
             16..=231 => {
                 let offset = self.0 - 16;
                 let r = (offset / 36) % 6;
@@ -133,6 +186,7 @@ impl Color {
                 let b = offset % 6;
                 (RGB[r as usize], RGB[g as usize], RGB[b as usize])
             }
+            // Greyscale colors
             232..=255 => {
                 let step = self.0 - 232;
                 (
