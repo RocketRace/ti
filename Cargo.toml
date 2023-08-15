@@ -8,7 +8,7 @@ images = ["dep:image"]
 
 # Some examples require non-default features.
 [[example]]
-name = "png_sprite"
+name = "moving_hearts"
 required-features = ["images"]
 
 [dependencies]
