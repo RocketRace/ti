@@ -303,4 +303,11 @@ mod tests {
             Color::from_ansi_greyscale(23)
         );
     }
+    #[test]
+    fn test_greyscale_incrementing() {
+        let colors: Vec<_> = (0..24).map(Color::from_ansi_greyscale).collect();
+        let mut sorted = colors.clone();
+        sorted.sort_by(|a, b| a.to_rgb_approximate().0.cmp(&b.to_rgb_approximate().0));
+        assert_eq!(colors, sorted)
+    }
 }
