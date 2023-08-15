@@ -65,11 +65,12 @@ fn dist(a: (u8, u8, u8), b: (u8, u8, u8)) -> f32 {
 }
 
 macro_rules! define_standard_colors {
-    ($($name:ident $str:literal $num:literal),+) => {
+    ($($num:literal $name:ident $str:literal $($note:literal)?),+) => {
         $(
             #[doc = "The ANSI standard"]
             #[doc = $str]
             #[doc = "color. Its appearance varies across terminals and themes."]
+            $(#[doc = $note])?
             pub const $name: Color = Color::new($num);
         )+
     };
@@ -80,24 +81,26 @@ macro_rules! define_standard_colors {
 pub mod standard {
     use super::Color;
     define_standard_colors! {
-        BLACK "black" 0,
-        RED "red" 1,
-        GREEN "green" 2,
-        YELLOW "yellow" 3,
-        BLUE "blue" 4,
-        MAGENTA "magenta" 5,
-        CYAN "cyan" 6,
-        WHITE "white" 7,
-        BRIGHT_BLACK "bright black" 8,
-        BRIGHT_RED "bright red" 9,
-        BRIGHT_GREEN "bright green" 10,
-        BRIGHT_YELLOW "bright yellow" 11,
-        BRIGHT_BLUE "bright blue" 12,
-        BRIGHT_MAGENTA "bright magenta" 13,
-        BRIGHT_CYAN "bright cyan" 14,
-        BRIGHT_WHITE "bright white" 15
+        0 BLACK "black",
+        1 RED "red",
+        2 GREEN "green",
+        3 YELLOW "yellow",
+        4 BLUE "blue",
+        5 MAGENTA "magenta",
+        6 CYAN "cyan",
+        7 WHITE "white" "Note: This color is not equivalent to RGB white on most terminals.",
+        8 BRIGHT_BLACK "bright black",
+        9 BRIGHT_RED "bright red",
+        10 BRIGHT_GREEN "bright green",
+        11 BRIGHT_YELLOW "bright yellow",
+        12 BRIGHT_BLUE "bright blue",
+        13 BRIGHT_MAGENTA "bright magenta",
+        14 BRIGHT_CYAN "bright cyan",
+        15 BRIGHT_WHITE "bright white"
     }
 }
+
+use standard::*;
 
 impl Color {
     /// Creates a new color from an 8-bit ANSI color value.
@@ -137,6 +140,44 @@ impl Color {
         } else {
             components
         }
+    }
+    /// This is a simple algorithm that returns the closest ANSI standard color to the given RGB triplet.
+    /// It picks the color that is closest in cartesian distance to the input value, in the RGB cube.
+    ///
+    /// It is similar to [`Color::from_rgb_approximate()`] but with lower resolution. Like
+    /// [`Color::to_rgb_approximate()`], this models standard colors as RGB triplets with component values
+    /// in {0, 128, 255}. (The one exception to this is [`standard::WHITE`], defined as RGB (192, 192, 192)
+    /// that is similar to other terminals.)
+    pub fn standard_color_approximate(r: u8, g: u8, b: u8) -> Self {
+        let colors = [
+            BLACK,
+            RED,
+            GREEN,
+            GREEN,
+            YELLOW,
+            BLUE,
+            MAGENTA,
+            CYAN,
+            WHITE,
+            BRIGHT_BLACK,
+            BRIGHT_RED,
+            BRIGHT_GREEN,
+            BRIGHT_GREEN,
+            BRIGHT_YELLOW,
+            BRIGHT_BLUE,
+            BRIGHT_MAGENTA,
+            BRIGHT_CYAN,
+            BRIGHT_WHITE,
+        ];
+
+        colors
+            .into_iter()
+            .min_by(|&x, &y| {
+                let rgb_x = x.to_rgb_approximate();
+                let rgb_y = y.to_rgb_approximate();
+                dist(rgb_x, (r, g, b)).total_cmp(&dist(rgb_y, (r, g, b)))
+            })
+            .unwrap()
     }
     /// Returns a new color with the specified from red, green and blue components.
     /// Each component may span from 0 to 5 (inclusive). If any values are higher, they
@@ -309,5 +350,30 @@ mod tests {
         let mut sorted = colors.clone();
         sorted.sort_by(|a, b| a.to_rgb_approximate().0.cmp(&b.to_rgb_approximate().0));
         assert_eq!(colors, sorted)
+    }
+
+    #[test]
+    fn test_standard_color_approx() {
+        assert_eq!(Color::standard_color_approximate(12, 8, 3), standard::BLACK);
+        assert_eq!(
+            Color::standard_color_approximate(124, 45, 55),
+            standard::RED
+        );
+        assert_eq!(
+            Color::standard_color_approximate(184, 125, 200),
+            standard::WHITE
+        );
+        assert_eq!(
+            Color::standard_color_approximate(244, 225, 240),
+            standard::BRIGHT_WHITE
+        );
+        assert_eq!(
+            Color::standard_color_approximate(254, 1, 128),
+            standard::MAGENTA
+        );
+        assert_eq!(
+            Color::standard_color_approximate(254, 1, 126),
+            standard::BRIGHT_RED
+        );
     }
 }
