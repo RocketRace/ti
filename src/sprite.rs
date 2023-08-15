@@ -3,6 +3,8 @@ use smallvec::{smallvec, SmallVec};
 use std::array;
 
 #[cfg(feature = "images")]
+pub use image::ImageResult;
+#[cfg(feature = "images")]
 use image::{imageops::FilterType, DynamicImage, GenericImageView, Rgba};
 
 use crate::{
@@ -153,14 +155,16 @@ impl Sprite {
         path: P,
         width_px: u16,
         height_px: u16,
+        use_alpha_channel: bool,
     ) -> image::ImageResult<Self> {
-        Ok(Self::from_image_data_rgb_resize(
+        Ok(Self::from_image_data(
             image::open(path)?,
             width_px,
             height_px,
             FilterType::Nearest,
             FilterType::Nearest,
-            false,
+            ColorMode::Rgb,
+            use_alpha_channel,
         ))
     }
 
@@ -172,13 +176,35 @@ impl Sprite {
         path: P,
         width_px: u16,
         height_px: u16,
+        use_alpha_channel: bool,
     ) -> image::ImageResult<Self> {
-        Ok(Self::from_image_data_rgb_resize(
+        Ok(Self::from_image_data(
             image::open(path)?,
             width_px,
             height_px,
             FilterType::Nearest,
             FilterType::Nearest,
+            ColorMode::Standard,
+            use_alpha_channel,
+        ))
+    }
+
+    /// Reads and parses an image sprite from the specified file path using standard ANSI colors.
+    ///
+    /// This is a version of [`Sprite::rgb_from_image_path()`] that parses colors as standard colors only.
+    #[cfg(feature = "images")]
+    pub fn mono_from_image_path<P: AsRef<std::path::Path>>(
+        path: P,
+        width_px: u16,
+        height_px: u16,
+    ) -> image::ImageResult<Self> {
+        Ok(Self::from_image_data(
+            image::open(path)?,
+            width_px,
+            height_px,
+            FilterType::Nearest,
+            FilterType::Nearest,
+            ColorMode::Monochrome,
             true,
         ))
     }
@@ -187,31 +213,55 @@ impl Sprite {
     ///
     /// The `rescale_filter` declares the method used to resize to a specified resolution, and `downscale_filter` declares
     /// the method used to thumbnail each cell into a single color.
+    /// `color_mode` specifies the color resolution used in the output, and `use_alpha_channel` dictates whether the image's alpha channel
+    /// will be used to infer sprite shape.
     #[cfg(feature = "images")]
-    fn from_image_data_rgb_resize(
+    fn from_image_data(
         img: DynamicImage,
         width_px: u16,
         height_px: u16,
         rescale_filter: FilterType,
         downscale_filter: FilterType,
-        use_only_standard_colors: bool,
+        color_mode: ColorMode,
+        use_alpha_channel: bool,
     ) -> Self {
+        use crate::units::pos_components;
+
         let width_cells = width_px / PIXEL_WIDTH as u16;
         let height_cells = height_px / PIXEL_HEIGHT as u16;
         let resized = img.resize_exact(width_px as u32, height_px as u32, rescale_filter);
 
+        let mut data: SpriteData =
+            smallvec![ColoredCell::default(); cell_length(width_cells, height_cells)];
+
+        // Initialize pixel contents first
+        if use_alpha_channel {
+            for (x, y, Rgba([_, _, _, a])) in resized.pixels() {
+                let ((cell_x, px_x), (cell_y, px_y)) = pos_components(x as u16, y as u16);
+                let idx = index(cell_x, cell_y, width_cells);
+                let bit = Cell::from_bit_position(px_x, px_y).unwrap();
+                if a < 128 {
+                    data[idx].cell = data[idx].cell | bit;
+                }
+            }
+        } else {
+            data.fill(ColoredCell::new(Cell::full(), None))
+        }
+
         let colors =
             resized.resize_exact(width_cells as u32, height_cells as u32, downscale_filter);
-        let mut data = smallvec![ColoredCell::default(); cell_length(width_cells, height_cells)];
 
-        for (x, y, Rgba([r, g, b, _])) in colors.pixels() {
-            let index = index(x as u16, y as u16, width_cells);
-            let color = if use_only_standard_colors {
-                Color::standard_color_approximate(r, g, b)
-            } else {
-                Color::from_rgb_approximate(r, g, b)
-            };
-            data[index] = ColoredCell::new(Cell::new(0xff), Some(color));
+        // Then, pixel colors
+        if matches!(color_mode, ColorMode::Rgb | ColorMode::Standard) {
+            for (x, y, Rgba([r, g, b, _])) in colors.pixels() {
+                let index = index(x as u16, y as u16, width_cells);
+                let color = if matches!(color_mode, ColorMode::Standard) {
+                    Color::standard_color_approximate(r, g, b)
+                } else {
+                    Color::from_rgb_approximate(r, g, b)
+                };
+                data[index] = ColoredCell::new(Cell::new(0xff), Some(color));
+            }
         }
 
         Sprite::new(data, width_cells, height_cells)
@@ -228,6 +278,12 @@ impl Sprite {
     }
 }
 
+enum ColorMode {
+    Monochrome,
+    Standard,
+    Rgb,
+}
+
 #[cfg(all(test, feature = "images"))]
 mod image_tests {
     use crate::screen::Screen;
@@ -237,7 +293,7 @@ mod image_tests {
     #[test]
     fn sprite_image_from_path() {
         let sprite =
-            Sprite::rgb_from_image_path("examples/sprite.png", 24, 24).expect("png failure");
+            Sprite::rgb_from_image_path("examples/sprite.png", 24, 24, true).expect("png failure");
         assert_eq!(sprite.height, 6);
         assert_eq!(sprite.width, 12);
         let mut screen = Screen::new_cells(12, 6);

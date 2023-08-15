@@ -86,6 +86,11 @@ impl Cell {
         Self::new(0)
     }
 
+    /// Creates a new full cell.
+    pub fn full() -> Self {
+        Self::new(0xff)
+    }
+
     /// Create a new cell with the specified internal bits.
     pub fn new(bits: u8) -> Self {
         Self { bits }
