@@ -5,7 +5,7 @@ use std::array;
 #[cfg(feature = "images")]
 pub use image::ImageResult;
 #[cfg(feature = "images")]
-use image::{imageops::FilterType, DynamicImage, GenericImageView, Rgba};
+use image::{DynamicImage, GenericImageView, Rgba};
 
 use crate::{
     cell::{Cell, OffsetCell, BRAILLE_UTF8_BYTES, PIXEL_HEIGHT, PIXEL_OFFSETS, PIXEL_WIDTH},
@@ -153,16 +153,10 @@ impl Sprite {
     #[cfg(feature = "images")]
     pub fn rgb_from_image_path<P: AsRef<std::path::Path>>(
         path: P,
-        width_px: u16,
-        height_px: u16,
         use_alpha_channel: bool,
     ) -> image::ImageResult<Self> {
         Ok(Self::from_image_data(
             image::open(path)?,
-            width_px,
-            height_px,
-            FilterType::Nearest,
-            FilterType::Nearest,
             ColorMode::Rgb,
             use_alpha_channel,
         ))
@@ -174,16 +168,10 @@ impl Sprite {
     #[cfg(feature = "images")]
     pub fn standard_from_image_path<P: AsRef<std::path::Path>>(
         path: P,
-        width_px: u16,
-        height_px: u16,
         use_alpha_channel: bool,
     ) -> image::ImageResult<Self> {
         Ok(Self::from_image_data(
             image::open(path)?,
-            width_px,
-            height_px,
-            FilterType::Nearest,
-            FilterType::Nearest,
             ColorMode::Standard,
             use_alpha_channel,
         ))
@@ -193,17 +181,9 @@ impl Sprite {
     ///
     /// This is a version of [`Sprite::rgb_from_image_path()`] that parses colors as standard colors only.
     #[cfg(feature = "images")]
-    pub fn mono_from_image_path<P: AsRef<std::path::Path>>(
-        path: P,
-        width_px: u16,
-        height_px: u16,
-    ) -> image::ImageResult<Self> {
+    pub fn mono_from_image_path<P: AsRef<std::path::Path>>(path: P) -> image::ImageResult<Self> {
         Ok(Self::from_image_data(
             image::open(path)?,
-            width_px,
-            height_px,
-            FilterType::Nearest,
-            FilterType::Nearest,
             ColorMode::Monochrome,
             true,
         ))
@@ -217,30 +197,32 @@ impl Sprite {
     /// will be used to infer sprite shape.
     #[cfg(feature = "images")]
     fn from_image_data(
-        img: DynamicImage,
-        width_px: u16,
-        height_px: u16,
-        rescale_filter: FilterType,
-        downscale_filter: FilterType,
+        mut img: DynamicImage,
         color_mode: ColorMode,
         use_alpha_channel: bool,
     ) -> Self {
+        use std::collections::BTreeMap;
+
+        use image::GenericImage;
+
         use crate::units::pos_components;
+
+        let width_px = img.width() as u16;
+        let height_px = img.height() as u16;
 
         let width_cells = width_px / PIXEL_WIDTH as u16;
         let height_cells = height_px / PIXEL_HEIGHT as u16;
-        let resized = img.resize_exact(width_px as u32, height_px as u32, rescale_filter);
 
         let mut data: SpriteData =
             smallvec![ColoredCell::default(); cell_length(width_cells, height_cells)];
 
         // Initialize pixel contents first
         if use_alpha_channel {
-            for (x, y, Rgba([_, _, _, a])) in resized.pixels() {
+            for (x, y, Rgba([_, _, _, a])) in img.pixels() {
                 let ((cell_x, px_x), (cell_y, px_y)) = pos_components(x as u16, y as u16);
                 let idx = index(cell_x, cell_y, width_cells);
                 let bit = Cell::from_bit_position(px_x, px_y).unwrap();
-                if a < 128 {
+                if a > 128 {
                     data[idx].cell = data[idx].cell | bit;
                 }
             }
@@ -248,19 +230,37 @@ impl Sprite {
             data.fill(ColoredCell::new(Cell::full(), None))
         }
 
-        let colors =
-            resized.resize_exact(width_cells as u32, height_cells as u32, downscale_filter);
-
         // Then, pixel colors
         if matches!(color_mode, ColorMode::Rgb | ColorMode::Standard) {
-            for (x, y, Rgba([r, g, b, _])) in colors.pixels() {
-                let index = index(x as u16, y as u16, width_cells);
-                let color = if matches!(color_mode, ColorMode::Standard) {
-                    Color::standard_color_approximate(r, g, b)
-                } else {
-                    Color::from_rgb_approximate(r, g, b)
-                };
-                data[index] = ColoredCell::new(Cell::new(0xff), Some(color));
+            for y_cell in 0..height_cells {
+                for x_cell in 0..width_cells {
+                    let x_px = x_cell * PIXEL_WIDTH as u16;
+                    let y_px = y_cell * PIXEL_HEIGHT as u16;
+
+                    let index = index(x_cell, y_cell, width_cells);
+
+                    let view = img.sub_image(
+                        x_px as u32,
+                        y_px as u32,
+                        PIXEL_WIDTH as u32,
+                        PIXEL_HEIGHT as u32,
+                    );
+
+                    let mut pxs = BTreeMap::new();
+                    for (_, _, Rgba([r, g, b, a])) in view.pixels() {
+                        if a > 128 || !use_alpha_channel {
+                            let color = if matches!(color_mode, ColorMode::Rgb) {
+                                Color::from_rgb_approximate(r, g, b)
+                            } else {
+                                Color::standard_color_approximate(r, g, b)
+                            };
+                            pxs.entry(color).and_modify(|n| *n += 1).or_insert(1);
+                        }
+                    }
+                    let max = pxs.into_iter().max_by_key(|p| p.1).map(|p| p.0);
+
+                    data[index].color = max;
+                }
             }
         }
 
@@ -293,11 +293,10 @@ mod image_tests {
 
     #[test]
     fn sprite_image_from_path() {
-        let sprite =
-            Sprite::rgb_from_image_path("examples/sprite.png", 24, 24, true).expect("png failure");
-        assert_eq!(sprite.height, 6);
-        assert_eq!(sprite.width, 12);
-        let mut screen = Screen::new_cells(12, 6);
+        let sprite = Sprite::rgb_from_image_path("examples/heart.png", true).expect("png failure");
+        assert_eq!(sprite.height, 4);
+        assert_eq!(sprite.width, 8);
+        let mut screen = Screen::new_pixels(16, 16);
         screen.draw_sprite(&sprite, 0, 0, crate::screen::Blit::Set);
         screen.rasterize();
     }

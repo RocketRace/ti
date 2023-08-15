@@ -365,9 +365,11 @@ impl Screen {
         let data = &sprite.offsets[offset as usize];
         data.iter().enumerate().fold(true, |acc, (i, cell)| {
             let (x_cell, y_cell) = sprite.from_index(i, offset);
-            acc & self.draw_cell(cell.cell, x_cell + dx_cell, y_cell + dy_cell, blit)
+            let x = x_cell + dx_cell;
+            let y = y_cell + dy_cell;
+            acc & self.draw_cell(cell.cell, x, y, blit)
                 & if let Some(color) = cell.color {
-                    self.draw_cell_color(color, x_cell, y_cell)
+                    self.draw_cell_color(color, x, y)
                 } else {
                     true
                 }
