@@ -3,5 +3,7 @@
 set -ex
 
 cargo fmt --check --all
+# Check with features enabled and disabled to make sure there aren't cfg mistakes
+cargo clippy --all-targets --workspace -- --deny warnings
 cargo clippy --all-features --all-targets --workspace -- --deny warnings
 cargo test --all-features --all-targets --workspace
