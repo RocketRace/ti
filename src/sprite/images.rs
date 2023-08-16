@@ -22,7 +22,6 @@ impl Sprite {
     /// The pixels in the output image are all "on" (in terms of their [`Cell`] representation). The colors in the
     /// input image are reflected in the *cell colors* of the output sprite.
     ///
-    #[cfg(feature = "images")]
     pub fn rgb_from_image_path<P: AsRef<std::path::Path>>(
         path: P,
         use_alpha_channel: bool,
@@ -37,7 +36,6 @@ impl Sprite {
     /// Reads and parses an image sprite from the specified file path using standard ANSI colors.
     ///
     /// This is a version of [`Sprite::rgb_from_image_path()`] that parses colors as standard colors only.
-    #[cfg(feature = "images")]
     pub fn standard_from_image_path<P: AsRef<std::path::Path>>(
         path: P,
         use_alpha_channel: bool,
@@ -52,7 +50,6 @@ impl Sprite {
     /// Reads and parses an image sprite from the specified file path using standard ANSI colors.
     ///
     /// This is a version of [`Sprite::rgb_from_image_path()`] that parses colors as standard colors only.
-    #[cfg(feature = "images")]
     pub fn mono_from_image_path<P: AsRef<std::path::Path>>(path: P) -> image::ImageResult<Self> {
         Ok(Self::from_image_data(
             image::open(path)?,
@@ -67,7 +64,6 @@ impl Sprite {
     /// the method used to thumbnail each cell into a single color.
     /// `color_mode` specifies the color resolution used in the output, and `use_alpha_channel` dictates whether the image's alpha channel
     /// will be used to infer sprite shape.
-    #[cfg(feature = "images")]
     fn from_image_data(
         mut img: DynamicImage,
         color_mode: ColorMode,
