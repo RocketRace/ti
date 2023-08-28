@@ -23,8 +23,8 @@ lit and unlit pixels sufficiently. In that case, this repository also includes t
 ## Next steps
 
 - [x] Convert true colors to palette colors
-- [ ] Operations to read sprites from image files in more advanced ways
-- [ ] A simple rendering loop
+- [x] Operations to read sprites from image files in more advanced ways
+- [x] A simple rendering loop
 - [ ] Read input
 - [ ] When drawing a standalone frame, ensure there's enough space
 - [x] Better braille font, and a guide on it maybe

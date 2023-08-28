@@ -11,6 +11,10 @@ images = ["dep:image"]
 name = "moving_hearts"
 required-features = ["images"]
 
+[[example]]
+name = "bouncing_heart"
+required-features = ["images"]
+
 [dependencies]
 crossterm = "0.26.1"
 image = { version = "0.24.6", optional = true }
