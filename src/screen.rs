@@ -2,7 +2,10 @@
 //!
 //! Contains the [`Screen`] type and its public interface.
 
-use std::io::{self, stdout, Write};
+use std::{
+    io::{self, stdout, Write},
+    time::Duration,
+};
 
 use crossterm::{
     cursor::{MoveTo, MoveToColumn, MoveToRow},
@@ -473,6 +476,28 @@ impl Screen {
             }
         }
         buf.flush()?;
+        Ok(())
+    }
+
+    /// Resets the working state of the screen.
+    pub fn reset_deltas(&mut self) {
+        self.deltas.fill(None);
+        self.colors.fill(None);
+    }
+
+    /// Enters the rendering loop. Renders 60 times a second.
+    pub fn start_loop<F: FnMut(&mut Self) -> io::Result<()>>(
+        &mut self,
+        frame_rate: u8,
+        mut tick: F,
+    ) -> io::Result<()> {
+        self.enter_screen()?;
+        while let Ok(()) = tick(self) {
+            self.render_screen()?;
+            self.reset_deltas();
+            std::thread::sleep(Duration::from_secs_f64(1. / frame_rate as f64))
+        }
+        self.exit_screen()?;
         Ok(())
     }
 }
