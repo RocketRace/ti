@@ -79,21 +79,21 @@ impl Sprite {
 
                         match cell.with_offset(dx, dy) {
                             OffsetCell::Aligned { cell } => {
-                                buf[i_ul] = ColoredCell::new(cell, color);
+                                buf[i_ul].merge_cell(cell, color);
                             }
                             OffsetCell::Horizontal { left, right } => {
-                                buf[i_ul].merge_cell(left);
-                                buf[i_ur] = ColoredCell::new(right, color);
+                                buf[i_ul].merge_cell(left, color);
+                                buf[i_ur].merge_cell(right, color);
                             }
                             OffsetCell::Vertical { up, down } => {
-                                buf[i_ul].merge_cell(up);
-                                buf[i_dl] = ColoredCell::new(down, color);
+                                buf[i_ul].merge_cell(up, color);
+                                buf[i_dl].merge_cell(down, color);
                             }
                             OffsetCell::Corner { ul, ur, dl, dr } => {
-                                buf[i_ul].merge_cell(ul);
-                                buf[i_ur].merge_cell(ur);
-                                buf[i_dl].merge_cell(dl);
-                                buf[i_dr] = ColoredCell::new(dr, color);
+                                buf[i_ul].merge_cell(ul, color);
+                                buf[i_ur].merge_cell(ur, color);
+                                buf[i_dl].merge_cell(dl, color);
+                                buf[i_dr].merge_cell(dr, color);
                             }
                         }
                     }
@@ -148,6 +148,25 @@ impl Sprite {
     pub const fn offset_size(&self, offset: u8) -> (u16, u16) {
         let (x, y) = offset_px(offset);
         ((x != 0) as u16 + self.width, (y != 0) as u16 + self.height)
+    }
+
+    /// Returns the width of the sprite in cells, assuming it is at a zero pixel offset
+    pub const fn default_width(&self) -> u16 {
+        self.offset_size(0).0
+    }
+    /// Returns the height of the sprite in cells, assuming it is at a zero pixel offset
+    pub const fn default_height(&self) -> u16 {
+        self.offset_size(0).1
+    }
+
+    /// Creates a copy of the sprite but with all pixels set to the given color
+    pub fn recolor<F: Fn(ColoredCell) -> Option<Color>>(&self, f: F) -> Self {
+        let data: SpriteData = self.offsets[0]
+            .iter()
+            .copied()
+            .map(|cell| ColoredCell::new(cell.cell, f(cell)))
+            .collect();
+        Self::new(data, self.default_width(), self.default_height())
     }
 }
 

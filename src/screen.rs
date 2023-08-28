@@ -8,7 +8,7 @@ use std::{
 };
 
 use crossterm::{
-    cursor::{MoveTo, MoveToColumn, MoveToRow},
+    cursor::{Hide, MoveTo, MoveToColumn, MoveToRow, Show},
     style::SetForegroundColor,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand, QueueableCommand,
@@ -370,12 +370,17 @@ impl Screen {
             let (x_cell, y_cell) = sprite.from_index(i, offset);
             let x = x_cell + dx_cell;
             let y = y_cell + dy_cell;
-            acc & self.draw_cell(cell.cell, x, y, blit)
-                & if let Some(color) = cell.color {
-                    self.draw_cell_color(color, x, y)
+            if !cell.cell.is_empty() {
+                let drawn = self.draw_cell(cell.cell, x, y, blit);
+                if let Some(color) = cell.color {
+                    let colored = self.draw_cell_color(color, x, y);
+                    acc & drawn & colored
                 } else {
-                    true
+                    acc & drawn
                 }
+            } else {
+                acc
+            }
         })
     }
 
@@ -427,13 +432,13 @@ impl Screen {
 
     /// Enters the terminal's alternate screen.
     pub fn enter_screen(&self) -> io::Result<()> {
-        stdout().execute(EnterAlternateScreen)?;
+        stdout().execute(EnterAlternateScreen)?.execute(Hide)?;
         Ok(())
     }
 
     /// Exit's the terminal's alternate screen.
     pub fn exit_screen(&self) -> io::Result<()> {
-        stdout().execute(LeaveAlternateScreen)?;
+        stdout().execute(LeaveAlternateScreen)?.execute(Show)?;
         Ok(())
     }
 

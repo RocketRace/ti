@@ -114,6 +114,7 @@ impl Sprite {
                         PIXEL_HEIGHT as u32,
                     );
 
+                    // hmm
                     let mut pxs = BTreeMap::new();
                     for (_, _, Rgba([r, g, b, a])) in view.pixels() {
                         if a > 128 || !use_alpha_channel {
