@@ -266,8 +266,11 @@ impl ColoredCell {
     }
 
     /// Combines this cell's pixel data with the argument [`Cell`] with a bitwise OR.
-    pub fn merge_cell(&mut self, cell: Cell) {
+    pub fn merge_cell(&mut self, cell: Cell, color: Option<Color>) {
         self.cell = self.cell | cell;
+        if !self.cell.is_empty() && color.is_some() {
+            self.color = color;
+        }
     }
 }
 

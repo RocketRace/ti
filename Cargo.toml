@@ -12,7 +12,7 @@ name = "moving_hearts"
 required-features = ["images"]
 
 [[example]]
-name = "bouncing_heart"
+name = "bouncing_hearts"
 required-features = ["images"]
 
 [dependencies]

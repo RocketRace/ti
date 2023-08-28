@@ -86,9 +86,19 @@ impl Cell {
         Self::new(0)
     }
 
+    /// Returns true whenever the cell is empty.
+    pub const fn is_empty(&self) -> bool {
+        self.bits == 0
+    }
+
     /// Creates a new full cell.
     pub const fn full() -> Self {
         Self::new(0xff)
+    }
+
+    /// Returns true whenever the cell is full.
+    pub const fn is_full(&self) -> bool {
+        self.bits == 0xff
     }
 
     /// Create a new cell with the specified internal bits.
