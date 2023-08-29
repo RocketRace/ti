@@ -25,9 +25,9 @@ lit and unlit pixels sufficiently. In that case, this repository also includes t
 - [x] Convert true colors to palette colors
 - [x] Operations to read sprites from image files in more advanced ways
 - [x] A simple rendering loop
-- [ ] Read input
-- [ ] When drawing a standalone frame, ensure there's enough space
+- [x] Read input
+- [x] When drawing a standalone frame, ensure there's enough space
 - [x] Better braille font, and a guide on it maybe
-- [ ] Examples in docstrings
+- [ ] More examples and tests (perpetually [ ])
 
 [documentation]: https://example.com
