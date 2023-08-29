@@ -5,15 +5,19 @@
 use std::{
     cmp::Ordering,
     io::{self, stdout, Write},
-    time::Duration,
+    thread,
+    time::{Duration, Instant},
 };
 
 use crossterm::{
     cursor::{Hide, MoveTo, MoveToColumn, MoveToRow, Show},
+    event::{self, KeyCode, KeyEvent, KeyModifiers},
     style::SetForegroundColor,
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand, QueueableCommand,
 };
+
+pub use crossterm::event::Event;
 
 use crate::{
     cell::{Cell, BRAILLE_UTF8_BYTES, PIXEL_HEIGHT, PIXEL_WIDTH},
@@ -244,13 +248,13 @@ impl Screen {
     /// let mut screen = Screen::new_cells(4, 2);
     /// let cell = Cell::from_braille('⢌').unwrap();
     ///
-    /// assert!(screen.draw_cell(cell, 0, 0, Blit::Set));
+    /// assert!(screen.draw_cell(cell, 0, 0, Blit::Set, 0));
     /// assert_eq!(screen.get_cell(0, 0), Some(cell));
     ///
-    /// assert!(!screen.draw_cell(cell, 99, 99, Blit::Set));
+    /// assert!(!screen.draw_cell(cell, 99, 99, Blit::Set, 0));
     /// assert_eq!(screen.get_cell(0, 0), Some(cell));
     ///
-    /// assert!(screen.draw_cell(cell, 0, 0, Blit::Toggle));
+    /// assert!(screen.draw_cell(cell, 0, 0, Blit::Toggle, 0));
     /// assert_eq!(screen.get_cell(0, 0), Some(Cell::empty()));
     /// ```
     pub fn draw_cell(&mut self, cell: Cell, x: u16, y: u16, blit: Blit, priority: u16) -> bool {
@@ -292,7 +296,7 @@ impl Screen {
     ///
     /// let mut screen = Screen::new_cells(2, 1);
     /// let color = Color::new(23);
-    /// assert!(screen.draw_cell_color(color, 1, 0));
+    /// assert!(screen.draw_cell_color(color, 1, 0, 0));
     /// assert_eq!(screen.get_color(1, 0), Some(color));
     /// ```
     pub fn draw_cell_color(&mut self, color: Color, x: u16, y: u16, priority: u16) -> bool {
@@ -326,7 +330,7 @@ impl Screen {
     /// use ti::screen::{Screen, Blit};
     ///
     /// let mut screen = Screen::new_pixels(1, 1);
-    /// assert!(screen.set_pixel(0, 0, true));
+    /// assert!(screen.draw_pixel(0, 0, true, Blit::Set));
     /// assert_eq!(screen.get_pixel(0, 0), Some(true));
     /// ```
     pub fn draw_pixel(&mut self, x: u16, y: u16, blit: Blit) -> bool {
@@ -480,11 +484,13 @@ impl Screen {
     /// Enters the terminal's alternate screen.
     pub fn enter_screen(&self) -> io::Result<()> {
         stdout().execute(EnterAlternateScreen)?.execute(Hide)?;
+        enable_raw_mode()?;
         Ok(())
     }
 
     /// Exit's the terminal's alternate screen.
     pub fn exit_screen(&self) -> io::Result<()> {
+        disable_raw_mode()?;
         stdout().execute(LeaveAlternateScreen)?.execute(Show)?;
         Ok(())
     }
@@ -496,7 +502,7 @@ impl Screen {
     }
 
     /// Renders the current state of the screen to some writable buffer.
-    pub fn write_screen_to<B: Write>(&mut self, buf: &mut B) -> io::Result<()> {
+    fn write_screen_to<B: Write>(&mut self, buf: &mut B) -> io::Result<()> {
         buf.queue(MoveTo(0, 0))?;
         let mut cur_x = 0;
         let mut cur_y = 0;
@@ -532,24 +538,63 @@ impl Screen {
     }
 
     /// Resets the working state of the screen.
-    pub fn reset_deltas(&mut self) {
+    fn reset_deltas(&mut self) {
         self.deltas.fill(None);
         self.colors.fill(None);
     }
 
+    /// Handles default events:
+    ///
+    /// * ctrl+c
+    fn handle_default_events(&self, event: Option<Event>) -> io::Result<bool> {
+        if let Some(Event::Key(KeyEvent {
+            code: KeyCode::Char('c'),
+            modifiers: KeyModifiers::CONTROL,
+            ..
+        })) = event
+        {
+            self.exit_screen()?;
+            Ok(false)
+        } else {
+            Ok(true)
+        }
+    }
+
     /// Enters the rendering loop. Renders 60 times a second.
-    pub fn start_loop<F: FnMut(&mut Self) -> io::Result<()>>(
+    pub fn start_loop<F: FnMut(&mut Self, Option<Event>) -> io::Result<()>>(
         &mut self,
         frame_rate: u8,
         mut tick: F,
     ) -> io::Result<()> {
         self.enter_screen()?;
-        while let Ok(()) = tick(self) {
+        let e = loop {
+            // Event polling
+            let start = Instant::now();
+            let frame = Duration::from_secs_f64(1. / frame_rate as f64);
+            let event = if let Ok(true) = event::poll(frame) {
+                Some(event::read()?)
+            } else {
+                None
+            };
+            let end = Instant::now();
+            let elapsed = end.duration_since(start);
+            if elapsed < frame {
+                thread::sleep(frame - elapsed);
+            }
+            if !self.handle_default_events(event.clone())? {
+                break None;
+            };
+            match tick(self, event) {
+                Ok(()) => (),
+                Err(e) => break Some(e),
+            };
             self.render_screen()?;
             self.reset_deltas();
-            std::thread::sleep(Duration::from_secs_f64(1. / frame_rate as f64))
-        }
+        };
         self.exit_screen()?;
+        if let Some(e) = e {
+            eprintln!("error: {e}");
+        }
         Ok(())
     }
 }

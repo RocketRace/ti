@@ -81,7 +81,7 @@ fn main() {
 
     let mut ticks = 0;
     screen
-        .start_loop(60, |s| {
+        .start_loop(60, |s, _| {
             s.clear();
             for heart in &mut hearts {
                 heart.tick(ticks);
