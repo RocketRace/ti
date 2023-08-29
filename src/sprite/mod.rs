@@ -28,6 +28,8 @@ pub struct Sprite {
     pub offsets: [SpriteData; PIXEL_OFFSETS as usize],
     width: u16,
     height: u16,
+    /// The draw priority of the sprite. Higher priority sprites will be drawn on top of lower priority ones.
+    pub priority: u16,
 }
 
 type SpriteData = SmallVec<[ColoredCell; SPRITE_STACK_SIZE]>;
@@ -35,13 +37,14 @@ type SpriteData = SmallVec<[ColoredCell; SPRITE_STACK_SIZE]>;
 impl Sprite {
     /// Create a new empty [`Sprite`] with the given dimensions.
     /// The width and height parameters are in terms of cells.
-    pub fn empty(width_cells: u16, height_cells: u16) -> Self {
+    pub fn empty(width_cells: u16, height_cells: u16, priority: u16) -> Self {
         Self {
             offsets: array::from_fn(
                 |_| smallvec![ColoredCell::default(); cell_length(width_cells, height_cells)],
             ),
             width: width_cells,
             height: height_cells,
+            priority,
         }
     }
 
@@ -58,8 +61,8 @@ impl Sprite {
     }
 
     /// Creates a sprite from raw data.
-    pub fn new(data: SpriteData, width_cells: u16, height_cells: u16) -> Self {
-        let mut this = Self::empty(width_cells, height_cells);
+    pub fn new(data: SpriteData, width_cells: u16, height_cells: u16, priority: u16) -> Self {
+        let mut this = Self::empty(width_cells, height_cells, priority);
         for dy in 0..PIXEL_HEIGHT {
             for dx in 0..PIXEL_WIDTH {
                 let offset = px_offset(dx, dy);
@@ -108,9 +111,9 @@ impl Sprite {
     ///
     /// Returns None if any characters in the string are non-braille, or if the rows
     /// are different lengths.
-    pub fn from_braille_string(s: &[&str], color: Option<Color>) -> Option<Self> {
+    pub fn from_braille_string(s: &[&str], color: Option<Color>, priority: u16) -> Option<Self> {
         if s.is_empty() {
-            Some(Sprite::empty(0, 0))
+            Some(Sprite::empty(0, 0, priority))
         } else {
             let width_bytes = s[0].len();
             if s.iter().any(|&r| r.len() != width_bytes) {
@@ -127,12 +130,12 @@ impl Sprite {
                     }
                 }
                 if width_bytes == 0 {
-                    Some(Self::empty(0, 0))
+                    Some(Self::empty(0, 0, priority))
                 } else {
                     let width_cells = width_bytes / BRAILLE_UTF8_BYTES;
                     let height_cells = data.len() / width_cells;
                     match (u16::try_from(width_cells), u16::try_from(height_cells)) {
-                        (Ok(w), Ok(h)) => Some(Self::new(data, w, h)),
+                        (Ok(w), Ok(h)) => Some(Self::new(data, w, h, priority)),
                         _ => None,
                     }
                 }
@@ -166,7 +169,12 @@ impl Sprite {
             .copied()
             .map(|cell| ColoredCell::new(cell.cell, f(cell)))
             .collect();
-        Self::new(data, self.default_width(), self.default_height())
+        Self::new(
+            data,
+            self.default_width(),
+            self.default_height(),
+            self.priority,
+        )
     }
 }
 
@@ -178,7 +186,8 @@ mod image_tests {
 
     #[test]
     fn sprite_image_from_path() {
-        let sprite = Sprite::rgb_from_image_path("examples/heart.png", true).expect("png failure");
+        let sprite =
+            Sprite::rgb_from_image_path("examples/heart.png", 1, true, 0).expect("png failure");
         assert_eq!(sprite.height, 4);
         assert_eq!(sprite.width, 8);
         let mut screen = Screen::new_pixels(16, 16);

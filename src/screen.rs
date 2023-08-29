@@ -3,6 +3,7 @@
 //! Contains the [`Screen`] type and its public interface.
 
 use std::{
+    cmp::Ordering,
     io::{self, stdout, Write},
     time::Duration,
 };
@@ -82,12 +83,39 @@ pub enum Blit {
 ///
 /// let screen = Screen::new_cells(2, 2);
 /// ```
+#[derive(Debug, Clone)]
 pub struct Screen {
     cells: Vec<Cell>,
-    deltas: Vec<Option<Cell>>,
-    colors: Vec<Option<Color>>,
+    deltas: Vec<Option<Priority<Cell>>>,
+    colors: Vec<Option<Priority<Color>>>,
     width: u16,
     height: u16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Priority<T> {
+    pub value: T,
+    pub priority: u16,
+}
+
+impl<T> Priority<T> {
+    pub fn new(value: T, priority: u16) -> Self {
+        Self { value, priority }
+    }
+}
+
+impl<T: Ord> Ord for Priority<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.priority
+            .cmp(&other.priority)
+            .then_with(|| self.value.cmp(&other.value))
+    }
+}
+
+impl<T: Ord> PartialOrd for Priority<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl Screen {
@@ -202,6 +230,9 @@ impl Screen {
     ///   are set in the sprite will be unset, rest are unchanged.
     /// * [`Blit::Toggle`] => Flip the pixels on the screen where the sprite is set.
     ///
+    /// The `priority` parameter will determine, *if `blit` is [`Blit::Set`] or [`Blit::Unset`]*,
+    /// whether the parameter will be drawn on top of previous cell data.
+    ///
     /// Returns `true` if the coordinates were valid, and `false` if the given coordinate was out of bounds.
     ///
     /// # Examples
@@ -222,19 +253,27 @@ impl Screen {
     /// assert!(screen.draw_cell(cell, 0, 0, Blit::Toggle));
     /// assert_eq!(screen.get_cell(0, 0), Some(Cell::empty()));
     /// ```
-    pub fn draw_cell(&mut self, cell: Cell, x: u16, y: u16, blit: Blit) -> bool {
+    pub fn draw_cell(&mut self, cell: Cell, x: u16, y: u16, blit: Blit, priority: u16) -> bool {
         if x < self.width() && y < self.height() {
             let index = self.index(x, y);
-            let old = self.cells[index];
-            let new = Cell::new(match blit {
+            let previous_cell = self.cells[index];
+            let new_cell = Cell::new(match blit {
                 Blit::Set => cell.bits,
                 Blit::Unset => !cell.bits,
-                Blit::Add => old.bits | cell.bits,
-                Blit::Subtract => old.bits & !cell.bits,
-                Blit::Toggle => old.bits ^ cell.bits,
+                Blit::Add => previous_cell.bits | cell.bits,
+                Blit::Subtract => previous_cell.bits & !cell.bits,
+                Blit::Toggle => previous_cell.bits ^ cell.bits,
             });
-            self.deltas[index] = Some(new);
-            self.cells[index] = new;
+            let new = Priority::new(new_cell, priority);
+            self.deltas[index] = if matches!(blit, Blit::Set | Blit::Unset) {
+                match self.deltas[index] {
+                    Some(previous) => Some(previous.max(new)),
+                    None => Some(new),
+                }
+            } else {
+                Some(new)
+            };
+            self.cells[index] = new_cell;
             true
         } else {
             false
@@ -242,6 +281,8 @@ impl Screen {
     }
 
     /// Sets the color of the cell at the specified position.
+    ///
+    /// The `priority` parameter can be used to decide which colors show on top.
     ///
     /// # Examples
     ///
@@ -254,10 +295,14 @@ impl Screen {
     /// assert!(screen.draw_cell_color(color, 1, 0));
     /// assert_eq!(screen.get_color(1, 0), Some(color));
     /// ```
-    pub fn draw_cell_color(&mut self, color: Color, x: u16, y: u16) -> bool {
+    pub fn draw_cell_color(&mut self, color: Color, x: u16, y: u16, priority: u16) -> bool {
         if x < self.width() && y < self.height() {
             let i = self.index(x, y);
-            self.colors[i] = Some(color);
+            let new_color = Priority::new(color, priority);
+            self.colors[i] = match self.colors[i] {
+                Some(previous) => Some(previous.max(new_color)),
+                None => Some(new_color),
+            };
             true
         } else {
             false
@@ -272,6 +317,8 @@ impl Screen {
     /// * [`Blit::Toggle`] causes the pixel to be flipped, i.e. turned from a 1 to a 0 and vice versa.
     ///
     /// Returns `true` if the coordinates were valid, and `false` if the given coordinate was out of bounds.
+    ///
+    /// This method always draws with maximum priority.
     ///
     /// # Examples
     ///
@@ -291,7 +338,7 @@ impl Screen {
             blit => blit,
         };
         let Some(cell) = Cell::from_bit_position(x_pixel, y_pixel) else { unreachable!() };
-        self.draw_cell(cell, x_cell, y_cell, blit)
+        self.draw_cell(cell, x_cell, y_cell, blit, u16::MAX)
     }
 
     /// Returns the cell value at the specified (cell) coordinates. Returns None if out of bounds.
@@ -332,7 +379,7 @@ impl Screen {
     pub fn get_color(&self, x: u16, y: u16) -> Option<Color> {
         if x < self.width() && y < self.height() {
             let index = self.index(x, y);
-            self.colors[index]
+            self.colors[index].map(|p| p.value)
         } else {
             None
         }
@@ -371,9 +418,9 @@ impl Screen {
             let x = x_cell + dx_cell;
             let y = y_cell + dy_cell;
             if !cell.cell.is_empty() {
-                let drawn = self.draw_cell(cell.cell, x, y, blit);
+                let drawn = self.draw_cell(cell.cell, x, y, blit, sprite.priority);
                 if let Some(color) = cell.color {
-                    let colored = self.draw_cell_color(color, x, y);
+                    let colored = self.draw_cell_color(color, x, y, sprite.priority);
                     acc & drawn & colored
                 } else {
                     acc & drawn
@@ -407,7 +454,7 @@ impl Screen {
             cell.bits = 0;
         }
         for delta in &mut self.deltas {
-            *delta = Some(Cell::empty())
+            *delta = Some(Priority::new(Cell::empty(), 0))
         }
     }
 
@@ -471,11 +518,11 @@ impl Screen {
                 }
                 if color != cur_color {
                     if let Some(color) = color {
-                        buf.queue(SetForegroundColor(color.to_crossterm_color()))?;
+                        buf.queue(SetForegroundColor(color.value.to_crossterm_color()))?;
                     }
                     cur_color = color;
                 }
-                buf.write_all(&cell.to_braille_utf8())?;
+                buf.write_all(&cell.value.to_braille_utf8())?;
                 cur_x = x + 1;
                 cur_y = y;
             }
@@ -561,13 +608,13 @@ mod tests {
     fn draw_cell() {
         let mut screen = Screen::new_cells(2, 1);
         let cell = Cell::new(0b0011_1100);
-        screen.draw_cell(cell, 0, 0, Blit::Set);
+        screen.draw_cell(cell, 0, 0, Blit::Set, 0);
         assert_eq!(screen.cells[0], cell);
         assert_eq!(screen.cells[1], Cell::new(0));
-        screen.draw_cell(cell, 1, 0, Blit::Unset);
+        screen.draw_cell(cell, 1, 0, Blit::Unset, 0);
         assert_eq!(screen.cells[0], cell);
         assert_eq!(screen.cells[1], Cell::new(!cell.bits));
-        screen.draw_cell(cell, 0, 0, Blit::Toggle);
+        screen.draw_cell(cell, 0, 0, Blit::Toggle, 0);
         assert_eq!(screen.cells[0], Cell::new(0));
         assert_eq!(screen.cells[1], Cell::new(!cell.bits));
     }
@@ -575,7 +622,7 @@ mod tests {
     #[test]
     fn draw_unaliged_cell() {
         let mut screen = Screen::new_cells(2, 2);
-        let sprite = Sprite::from_braille_string(&["⣿"], None).unwrap();
+        let sprite = Sprite::from_braille_string(&["⣿"], None, 0).unwrap();
         screen.draw_sprite(&sprite, 0, 0, Blit::Set);
         // unicode escapes used because many editors don't like blank characters
         assert_eq!(screen.rasterize(), "⣿\u{2800}\n\u{2800}\u{2800}\n");
@@ -590,7 +637,7 @@ mod tests {
     #[test]
     fn toggle_unaligned_cell() {
         let mut screen = Screen::new_cells(2, 2);
-        let sprite = Sprite::from_braille_string(&["⣿"], None).unwrap();
+        let sprite = Sprite::from_braille_string(&["⣿"], None, 0).unwrap();
         screen.draw_sprite(&sprite, 0, 0, Blit::Set);
         screen.draw_sprite(&sprite, 1, 1, Blit::Toggle);
         assert_eq!(screen.rasterize(), "⡏⡆\n⠈⠁\n");
@@ -600,7 +647,7 @@ mod tests {
     fn draw_monochrome_sprite() {
         let mut screen = Screen::new_cells(3, 2);
         let s = &["⢰⣶⡆", "⠸⠿⠇"];
-        let sprite = Sprite::from_braille_string(s, None).unwrap();
+        let sprite = Sprite::from_braille_string(s, None, 0).unwrap();
         screen.draw_sprite(&sprite, 0, 0, Blit::Set);
         eprintln!("{}", screen.rasterize());
         assert_eq!(screen.rasterize(), "⢰⣶⡆\n⠸⠿⠇\n");

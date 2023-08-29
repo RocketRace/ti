@@ -25,6 +25,6 @@ fn main() -> io::Result<()> {
 }
 
 fn draw_smiley(screen: &mut Screen, x: u16, y: u16, blit: Blit) {
-    let smiley = Sprite::from_braille_string(&["⢌⣈⠄"], Some(standard::GREEN)).unwrap();
+    let smiley = Sprite::from_braille_string(&["⢌⣈⠄"], Some(standard::GREEN), 0).unwrap();
     screen.draw_sprite(&smiley, x, y, blit);
 }

@@ -10,9 +10,8 @@ fn main() {
     let mut screen = Screen::new_pixels(16 + max * 2, 16 + max * 2);
     screen.enter_screen().unwrap();
 
-    let use_alpha_channel = true;
-    let sprite = Sprite::rgb_from_image_path("examples/heart.png", use_alpha_channel)
-        .expect("png reading failure");
+    let sprite =
+        Sprite::rgb_from_image_path("examples/heart.png", 1, true, 0).expect("png reading failure");
 
     for position in 0..=max {
         screen.clear();

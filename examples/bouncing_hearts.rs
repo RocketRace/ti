@@ -1,3 +1,4 @@
+//! Quick and dirty example of a simple tick loop
 use ti::{
     color::standard,
     screen::{Blit, Screen},
@@ -50,9 +51,8 @@ fn main() {
     let height = 35;
     let mut screen = Screen::new_pixels(width, height);
 
-    let use_alpha_channel = true;
-    let sprite = Sprite::rgb_from_image_path("examples/heart.png", use_alpha_channel)
-        .expect("png reading failure");
+    let sprite =
+        Sprite::rgb_from_image_path("examples/heart.png", 1, true, 2).expect("png reading failure");
 
     let heart = Heart {
         sprite,
@@ -71,11 +71,13 @@ fn main() {
     hearts[1].right = false;
     hearts[1].y = 12;
     hearts[1].sprite = hearts[1].sprite.recolor(|_| Some(standard::GREEN));
-    hearts[0].slowness = 1;
-    hearts[0].x = 40;
-    hearts[0].y = 3;
-    hearts[0].down = false;
-    hearts[0].sprite = hearts[1].sprite.recolor(|_| Some(standard::BRIGHT_YELLOW));
+    hearts[1].sprite.priority = 1;
+    hearts[2].slowness = 1;
+    hearts[2].x = 40;
+    hearts[2].y = 3;
+    hearts[2].down = false;
+    hearts[2].sprite = hearts[1].sprite.recolor(|_| Some(standard::BRIGHT_YELLOW));
+    hearts[2].sprite.priority = 0;
 
     let mut ticks = 0;
     screen
