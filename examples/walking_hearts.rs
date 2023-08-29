@@ -1,8 +1,6 @@
 use ti::{
-    screen::{
-        event::{Event, KeyCode, KeyEvent},
-        Blit, Screen,
-    },
+    event::Event,
+    screen::{Blit, Screen},
     sprite::Sprite,
 };
 
@@ -28,15 +26,13 @@ fn main() {
                 s.draw_pixel_colored(x, height - 4, Blit::Set, None);
             }
             s.draw_sprite(&sprite, x, y, Blit::Set);
-            if let Some(Event::Key(KeyEvent { code, .. })) = event {
-                match code {
-                    // magic numbers based on sprite shape
-                    KeyCode::Right => x = x.saturating_add(1).clamp(2, width - 34),
-                    KeyCode::Left => x = x.saturating_sub(1).clamp(2, width - 34),
-                    KeyCode::Down => y = y.saturating_add(1).clamp(2, height - 34),
-                    KeyCode::Up => y = y.saturating_sub(1).clamp(2, height - 34),
-                    _ => (),
-                }
+            match event {
+                // magic numbers based on sprite shape
+                Some(Event::Right) => x = x.saturating_add(1).clamp(2, width - 34),
+                Some(Event::Left) => x = x.saturating_sub(1).clamp(2, width - 34),
+                Some(Event::Down) => y = y.saturating_add(1).clamp(2, height - 34),
+                Some(Event::Up) => y = y.saturating_sub(1).clamp(2, height - 34),
+                _ => (),
             }
             Ok(())
         })

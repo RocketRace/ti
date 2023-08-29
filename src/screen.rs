@@ -11,17 +11,16 @@ use std::{
 
 use crossterm::{
     cursor::{Hide, MoveTo, MoveToColumn, MoveToRow, Show},
-    event::{Event, KeyCode, KeyEvent, KeyModifiers},
+    event::{poll, read, Event as CrosstermEvent, KeyCode, KeyEvent, KeyModifiers},
     style::{ResetColor, SetForegroundColor},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand, QueueableCommand,
 };
 
-pub use crossterm::event;
-
 use crate::{
     cell::{Cell, BRAILLE_UTF8_BYTES, PIXEL_HEIGHT, PIXEL_WIDTH},
     color::Color,
+    event::Event,
     sprite::Sprite,
     units::{cell_length, from_index, index, pos_components, px_offset},
 };
@@ -560,8 +559,8 @@ impl Screen {
     /// Handles default events:
     ///
     /// * ctrl+c
-    fn handle_default_events(&self, event: Option<Event>) -> io::Result<bool> {
-        if let Some(Event::Key(KeyEvent {
+    fn handle_default_events(&self, event: Option<CrosstermEvent>) -> io::Result<bool> {
+        if let Some(CrosstermEvent::Key(KeyEvent {
             code: KeyCode::Char('c'),
             modifiers: KeyModifiers::CONTROL,
             ..
@@ -585,8 +584,8 @@ impl Screen {
             // Event polling
             let start = Instant::now();
             let frame = Duration::from_secs_f64(1. / frame_rate as f64);
-            let event = if let Ok(true) = event::poll(frame) {
-                Some(event::read()?)
+            let event = if let Ok(true) = poll(frame) {
+                Some(read()?)
             } else {
                 None
             };
@@ -598,7 +597,7 @@ impl Screen {
             if !self.handle_default_events(event.clone())? {
                 break None;
             };
-            match tick(self, event) {
+            match tick(self, event.and_then(Event::from_crossterm_event)) {
                 Ok(()) => (),
                 Err(e) => break Some(e),
             };
