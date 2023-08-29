@@ -330,7 +330,7 @@ impl Screen {
     /// use ti::screen::{Screen, Blit};
     ///
     /// let mut screen = Screen::new_pixels(1, 1);
-    /// assert!(screen.draw_pixel(0, 0, true, Blit::Set));
+    /// assert!(screen.draw_pixel(0, 0, Blit::Set));
     /// assert_eq!(screen.get_pixel(0, 0), Some(true));
     /// ```
     pub fn draw_pixel(&mut self, x: u16, y: u16, blit: Blit) -> bool {
@@ -377,7 +377,7 @@ impl Screen {
     /// let mut screen = Screen::new_cells(2, 2);
     /// let color = Color::new(123);
     /// assert_eq!(screen.get_color(999, 999), None);
-    /// screen.draw_cell_color(color, 0, 0);
+    /// screen.draw_cell_color(color, 0, 0, 0);
     /// assert_eq!(screen.get_color(0, 0), Some(color));
     /// ```
     pub fn get_color(&self, x: u16, y: u16) -> Option<Color> {
