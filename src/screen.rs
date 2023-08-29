@@ -346,7 +346,7 @@ impl Screen {
         self.draw_cell(cell, x_cell, y_cell, blit, u16::MAX)
     }
 
-    /// An extension of [`draw_pixel()`] that also accepts an optional `color` parameter.
+    /// An extension of [`Screen::draw_pixel()`] that also accepts an optional `color` parameter.
     ///
     /// The priority is still maximum, the return value is the same bool, and blitting works as before.
     pub fn draw_pixel_colored(&mut self, x: u16, y: u16, blit: Blit, color: Option<Color>) -> bool {

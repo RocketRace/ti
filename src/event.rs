@@ -31,7 +31,7 @@ impl Event {
     /// Includes arrow keys, and a configurable keyset for Up, Left, Down, Right.
     ///
     /// A special case of this (using WASD for the directions) is common enough that it has
-    /// a special method: [`direction::wasd()`].
+    /// a special method: [`Event::direction_wasd()`].
     pub fn direction(&self, up: char, left: char, down: char, right: char) -> Option<Direction> {
         match self {
             Event::Up => Some(Direction::Up),
