@@ -1,5 +1,5 @@
 use ti::{
-    event::Event,
+    event::Direction,
     screen::{Blit, Screen},
     sprite::Sprite,
 };
@@ -26,13 +26,13 @@ fn main() {
                 s.draw_pixel_colored(x, height - 4, Blit::Set, None);
             }
             s.draw_sprite(&sprite, x, y, Blit::Set);
-            match event {
+            match event.and_then(|e| e.direction_wasd()) {
                 // magic numbers based on sprite shape
-                Some(Event::Right) => x = x.saturating_add(1).clamp(2, width - 34),
-                Some(Event::Left) => x = x.saturating_sub(1).clamp(2, width - 34),
-                Some(Event::Down) => y = y.saturating_add(1).clamp(2, height - 34),
-                Some(Event::Up) => y = y.saturating_sub(1).clamp(2, height - 34),
-                _ => (),
+                Some(Direction::Right) => x = x.saturating_add(1).clamp(2, width - 34),
+                Some(Direction::Left) => x = x.saturating_sub(1).clamp(2, width - 34),
+                Some(Direction::Down) => y = y.saturating_add(1).clamp(2, height - 34),
+                Some(Direction::Up) => y = y.saturating_sub(1).clamp(2, height - 34),
+                None => (),
             }
             Ok(())
         })
