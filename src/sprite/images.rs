@@ -2,8 +2,15 @@
 
 use super::*;
 
+use std::collections::BTreeMap;
+
 pub use image::ImageResult;
+
+use image::imageops::FilterType::Nearest;
+use image::GenericImage;
 use image::{DynamicImage, GenericImageView, Rgba};
+
+use crate::units::pos_components;
 
 enum ColorMode {
     Monochrome,
@@ -24,12 +31,16 @@ impl Sprite {
     ///
     pub fn rgb_from_image_path<P: AsRef<std::path::Path>>(
         path: P,
+        scale: u16,
         use_alpha_channel: bool,
+        priority: u16,
     ) -> image::ImageResult<Self> {
         Ok(Self::from_image_data(
             image::open(path)?,
             ColorMode::Rgb,
+            scale,
             use_alpha_channel,
+            priority,
         ))
     }
 
@@ -38,23 +49,33 @@ impl Sprite {
     /// This is a version of [`Sprite::rgb_from_image_path()`] that parses colors as standard colors only.
     pub fn standard_from_image_path<P: AsRef<std::path::Path>>(
         path: P,
+        scale: u16,
         use_alpha_channel: bool,
+        priority: u16,
     ) -> image::ImageResult<Self> {
         Ok(Self::from_image_data(
             image::open(path)?,
             ColorMode::Standard,
+            scale,
             use_alpha_channel,
+            priority,
         ))
     }
 
     /// Reads and parses an image sprite from the specified file path using standard ANSI colors.
     ///
     /// This is a version of [`Sprite::rgb_from_image_path()`] that parses colors as standard colors only.
-    pub fn mono_from_image_path<P: AsRef<std::path::Path>>(path: P) -> image::ImageResult<Self> {
+    pub fn mono_from_image_path<P: AsRef<std::path::Path>>(
+        path: P,
+        scale: u16,
+        priority: u16,
+    ) -> image::ImageResult<Self> {
         Ok(Self::from_image_data(
             image::open(path)?,
             ColorMode::Monochrome,
+            scale,
             true,
+            priority,
         ))
     }
 
@@ -67,14 +88,15 @@ impl Sprite {
     fn from_image_data(
         mut img: DynamicImage,
         color_mode: ColorMode,
+        scale: u16,
         use_alpha_channel: bool,
+        priority: u16,
     ) -> Self {
-        use std::collections::BTreeMap;
-
-        use image::GenericImage;
-
-        use crate::units::pos_components;
-
+        img = img.resize_exact(
+            img.width() * scale as u32,
+            img.height() * scale as u32,
+            Nearest,
+        );
         let width_px = img.width() as u16;
         let height_px = img.height() as u16;
 
@@ -133,6 +155,6 @@ impl Sprite {
             }
         }
 
-        Sprite::new(data, width_cells, height_cells)
+        Sprite::new(data, width_cells, height_cells, priority)
     }
 }
