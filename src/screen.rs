@@ -11,13 +11,13 @@ use std::{
 
 use crossterm::{
     cursor::{Hide, MoveTo, MoveToColumn, MoveToRow, Show},
-    event::{self, KeyCode, KeyEvent, KeyModifiers},
-    style::SetForegroundColor,
+    event::{Event, KeyCode, KeyEvent, KeyModifiers},
+    style::{ResetColor, SetForegroundColor},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand, QueueableCommand,
 };
 
-pub use crossterm::event::Event;
+pub use crossterm::event;
 
 use crate::{
     cell::{Cell, BRAILLE_UTF8_BYTES, PIXEL_HEIGHT, PIXEL_WIDTH},
@@ -345,6 +345,18 @@ impl Screen {
         self.draw_cell(cell, x_cell, y_cell, blit, u16::MAX)
     }
 
+    /// An extension of [`draw_pixel()`] that also accepts an optional `color` parameter.
+    ///
+    /// The priority is still maximum, the return value is the same bool, and blitting works as before.
+    pub fn draw_pixel_colored(&mut self, x: u16, y: u16, blit: Blit, color: Option<Color>) -> bool {
+        if let Some(color) = color {
+            let ((cell_x, _), (cell_y, _)) = pos_components(x, y);
+            // ignore result, accounted for in draw_pixel
+            self.draw_cell_color(color, cell_x, cell_y, u16::MAX);
+        }
+        self.draw_pixel(x, y, blit)
+    }
+
     /// Returns the cell value at the specified (cell) coordinates. Returns None if out of bounds.
     ///
     /// # Examples
@@ -525,6 +537,8 @@ impl Screen {
                 if color != cur_color {
                     if let Some(color) = color {
                         buf.queue(SetForegroundColor(color.value.to_crossterm_color()))?;
+                    } else {
+                        buf.queue(ResetColor)?;
                     }
                     cur_color = color;
                 }
