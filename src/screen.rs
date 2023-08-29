@@ -17,6 +17,8 @@ use crossterm::{
     ExecutableCommand, QueueableCommand,
 };
 
+pub use crossterm::event;
+
 use crate::{
     cell::{Cell, BRAILLE_UTF8_BYTES, PIXEL_HEIGHT, PIXEL_WIDTH},
     color::Color,
