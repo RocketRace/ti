@@ -1,16 +1,17 @@
 //! Module for manipulating [`Sprite`]s, i.e. rectangular collections of [`Cell`]s with associated color information.
 #[cfg(feature = "images")]
 mod images;
+use std::array;
+
 #[cfg(feature = "images")]
 pub use images::*;
 
 use smallvec::{smallvec, SmallVec};
-use std::array;
 
 use crate::{
     cell::{Cell, OffsetCell, BRAILLE_UTF8_BYTES, PIXEL_HEIGHT, PIXEL_OFFSETS, PIXEL_WIDTH},
     color::{Color, ColoredCell},
-    units::{cell_length, from_index, index, offset_px, px_offset},
+    units::{cell_length, from_index, index, offset_px, pos_components, px_offset},
 };
 
 /// Stack allocation size for each sprite's cell data
@@ -37,7 +38,10 @@ type SpriteData = SmallVec<[ColoredCell; SPRITE_STACK_SIZE]>;
 impl Sprite {
     /// Create a new empty [`Sprite`] with the given dimensions.
     /// The width and height parameters are in terms of cells.
+    /// This is because there is no way to distinguish between an empty pixel that's inside
+    /// the sprite and an empty pixel that's outside the sprite.
     pub fn empty(width_cells: u16, height_cells: u16, priority: u16) -> Self {
+        // note: don't use the new() constructor, it calls empty()
         Self {
             offsets: array::from_fn(
                 |_| smallvec![ColoredCell::default(); cell_length(width_cells, height_cells)],
@@ -46,6 +50,53 @@ impl Sprite {
             height: height_cells,
             priority,
         }
+    }
+    /// Create a new filled rectangular [`Sprite`] with the given color.
+    ///
+    /// The width and height parameters are in terms of pixels.
+    pub fn rectangle(width: u16, height: u16, color: Option<Color>, priority: u16) -> Self {
+        let ((cell_x, px_x), (cell_y, px_y)) = pos_components(width, height);
+        let width_cells = cell_x + if px_x == 0 { 0 } else { 1 };
+        let height_cells = cell_y + if px_y == 0 { 0 } else { 1 };
+
+        // Create an oversized rectangle and then crop the bottom/right borders
+        let mut data = smallvec![ColoredCell::new(Cell::full(), color); cell_length(width_cells, height_cells)];
+        if width_cells > 0 && height_cells > 0 {
+            if px_x != 0 {
+                for i in 0..height_cells {
+                    // Type annotations needed when indexing these for some reason
+                    let colored: &mut ColoredCell =
+                        &mut data[index(width_cells - 1, i, width_cells)];
+                    colored.cell = Cell::from_braille('⡇').unwrap();
+                }
+            }
+            if px_y != 0 {
+                for i in 0..width_cells {
+                    let colored: &mut ColoredCell =
+                        &mut data[index(i, height_cells - 1, width_cells)];
+                    let levels = [
+                        Cell::from_braille('⠉').unwrap(),
+                        Cell::from_braille('⠛').unwrap(),
+                        Cell::from_braille('⠿').unwrap(),
+                    ];
+                    colored.cell = levels[px_y as usize - 1];
+                }
+                // oh and don't forget the corner
+                if px_x != 0 {
+                    let last = data.len() - 1;
+                    let colored: &mut ColoredCell = &mut data[last];
+                    let levels = [
+                        Cell::from_braille('⠁').unwrap(),
+                        Cell::from_braille('⠃').unwrap(),
+                        Cell::from_braille('⠇').unwrap(),
+                    ];
+                    colored.cell = levels[px_y as usize - 1];
+                }
+            }
+        }
+
+        dbg!(&data, width_cells, height_cells, priority);
+        Self::new(data, width_cells, height_cells, priority)
     }
 
     /// Computes the array index of the cell at position (x, y) with the given sprite offset.
