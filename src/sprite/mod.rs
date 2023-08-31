@@ -1,6 +1,8 @@
 //! Module for manipulating [`Sprite`]s, i.e. rectangular collections of [`Cell`]s with associated color information.
 #[cfg(feature = "images")]
 mod images;
+use std::array;
+
 #[cfg(feature = "images")]
 pub use images::*;
 
@@ -39,12 +41,15 @@ impl Sprite {
     /// This is because there is no way to distinguish between an empty pixel that's inside
     /// the sprite and an empty pixel that's outside the sprite.
     pub fn empty(width_cells: u16, height_cells: u16, priority: u16) -> Self {
-        Self::new(
-            smallvec![ColoredCell::default(); cell_length(width_cells, height_cells)],
-            width_cells,
-            height_cells,
+        // note: don't use the new() constructor, it calls empty()
+        Self {
+            offsets: array::from_fn(
+                |_| smallvec![ColoredCell::default(); cell_length(width_cells, height_cells)],
+            ),
+            width: width_cells,
+            height: height_cells,
             priority,
-        )
+        }
     }
     /// Create a new filled rectangular [`Sprite`] with the given color.
     ///
@@ -80,11 +85,17 @@ impl Sprite {
                 if px_x != 0 {
                     let last = data.len() - 1;
                     let colored: &mut ColoredCell = &mut data[last];
-                    colored.cell = Cell::from_braille('⠁').unwrap();
+                    let levels = [
+                        Cell::from_braille('⠁').unwrap(),
+                        Cell::from_braille('⠃').unwrap(),
+                        Cell::from_braille('⠇').unwrap(),
+                    ];
+                    colored.cell = levels[px_y as usize - 1];
                 }
             }
         }
 
+        dbg!(&data, width_cells, height_cells, priority);
         Self::new(data, width_cells, height_cells, priority)
     }
 

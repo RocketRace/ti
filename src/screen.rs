@@ -342,7 +342,9 @@ impl Screen {
             Blit::Set => Blit::Add,
             blit => blit,
         };
-        let Some(cell) = Cell::from_bit_position(x_pixel, y_pixel) else { unreachable!() };
+        let Some(cell) = Cell::from_bit_position(x_pixel, y_pixel) else {
+            unreachable!()
+        };
         self.draw_cell(cell, x_cell, y_cell, blit, u16::MAX)
     }
 
@@ -417,7 +419,9 @@ impl Screen {
     /// ```
     pub fn get_pixel(&self, x: u16, y: u16) -> Option<bool> {
         let ((x_cell, x_pixel), (y_cell, y_pixel)) = pos_components(x, y);
-        let Some(mask) = Cell::from_bit_position(x_pixel, y_pixel) else { unreachable!() };
+        let Some(mask) = Cell::from_bit_position(x_pixel, y_pixel) else {
+            unreachable!()
+        };
         self.get_cell(x_cell, y_cell)
             .map(|cell| cell.bits & mask.bits != 0)
     }
@@ -490,7 +494,9 @@ impl Screen {
             let y = y as usize;
             buf[(y + 1) * (self.width() as usize * 3 + 1) - 1] = b'\n';
         }
-        let Ok(s) = String::from_utf8(buf) else { unreachable!() };
+        let Ok(s) = String::from_utf8(buf) else {
+            unreachable!()
+        };
         s
     }
 
