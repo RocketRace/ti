@@ -95,7 +95,6 @@ impl Sprite {
             }
         }
 
-        dbg!(&data, width_cells, height_cells, priority);
         Self::new(data, width_cells, height_cells, priority)
     }
 
