@@ -3,19 +3,63 @@
 use super::*;
 
 use std::collections::BTreeMap;
+use std::path::Path;
 
 pub use image::ImageResult;
 
 use image::imageops::FilterType::Nearest;
-use image::GenericImage;
-use image::{DynamicImage, GenericImageView, Rgba};
+use image::{DynamicImage, GenericImage, GenericImageView, Rgba};
 
 use crate::units::pos_components;
 
-enum ColorMode {
+/// The different ways that raw pixel data can be interpreted as a sprite.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ColorMode {
     Monochrome,
     Standard,
     Rgb,
+}
+
+/// A sprite atlas opened from a file.
+pub struct Atlas {
+    image: DynamicImage,
+    /// A setting to determine how sprites are read from this atlas
+    pub color_mode: ColorMode,
+    /// A setting to determine how sprites are read from this atlas
+    pub use_alpha_channel: bool,
+}
+
+impl Atlas {
+    /// Opens a sprite atlas from a file path.
+    pub fn open<P: AsRef<Path>>(
+        path: P,
+        color_mode: ColorMode,
+        use_alpha_channel: bool,
+    ) -> ImageResult<Self> {
+        image::open(path).map(|image| Atlas {
+            image,
+            color_mode,
+            use_alpha_channel,
+        })
+    }
+    /// Fetches the sprite at the given coordinates in this atlas.
+    pub fn sprite(
+        &self,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        scale: u16,
+        priority: u16,
+    ) -> Sprite {
+        Sprite::from_image_data(
+            DynamicImage::ImageRgba8(self.image.view(x, y, width, height).to_image()),
+            self.color_mode,
+            scale,
+            self.use_alpha_channel,
+            priority,
+        )
+    }
 }
 
 impl Sprite {

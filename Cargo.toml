@@ -19,6 +19,10 @@ required-features = ["images"]
 name = "walking_hearts"
 required-features = ["images"]
 
+[[example]]
+name = "atlas"
+required-features = ["images"]
+
 [dependencies]
 crossterm = "0.26.1"
 image = { version = "0.24.6", optional = true }
